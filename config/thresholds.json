@@ -2,14 +2,28 @@
   "_note": "线上阈值 + provenance。运行时读这里的数字；bench 可以回写（--promote），被回写的条目必须带 provenance（数据集、样本量、正例、硬负、报告路径、时间）。",
   "link": {
     "candidate_cos_min": 0.55,
-    "same_event_min": 0.7,
+    "same_event_min": 0.6,
     "affinity_min": 0.72,
     "affinity_ratio_min": 0.4,
     "provenance": {
-      "state": "uncalibrated",
-      "why": "0.55 / 0.70 是凭经验定的，没有标注集支撑；Phase 2 用 bench/link.v1.jsonl 重新定。",
-      "at": "2026-11-23"
-    }
+      "task": "link",
+      "dataset": "bench/link.v1.jsonl",
+      "labelled": 194,
+      "positives": 53,
+      "hard_negatives": 3,
+      "report": "bench/report-link-2026-11-23.md",
+      "chosen": {
+        "threshold": 0.6,
+        "precision": 1,
+        "recall": 0.6037735849056604,
+        "f1": 0.7529411764705882,
+        "hard_fpr": 0,
+        "forced": true
+      },
+      "at": "2026-11-23T07:02:34.276Z"
+    },
+    "final_min": 0.6,
+    "state": "calibrated"
   },
   "facts": {
     "recall_th": 0.55,

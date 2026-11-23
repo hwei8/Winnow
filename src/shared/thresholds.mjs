@@ -35,5 +35,8 @@ export function resetThresholds () { cache = null }
 
 /** 给报告用的 provenance 摘要：state 是 calibrated 还是 uncalibrated。 */
 export function provenanceOf (group) {
-  return allThresholds()?.[group]?.provenance || { state: 'unknown' }
+  const p = allThresholds()?.[group]?.provenance
+  if (!p) return { state: 'unknown' }
+  // 老数据只有为什么没标定；标定过的带 chosen（数据集、样本量、报告）
+  return { ...p, state: p.state || (p.chosen ? 'calibrated' : 'uncalibrated') }
 }

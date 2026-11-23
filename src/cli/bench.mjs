@@ -7,6 +7,7 @@
 //   node src/cli/bench.mjs --task=link                 # 打分 + 报告（结果缓存进 jsonl）
 //   node src/cli/bench.mjs --task=link --rescore       # 忽略缓存重打
 //   node src/cli/bench.mjs --task=link --promote=final # 把推荐阈值写进 config/thresholds.json
+//   node src/cli/bench.mjs --task=link --promote=final --at=0.6 # 覆盖推荐值（产品代价不对称时）
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs'
 import path from 'node:path'
 import { BENCH_DIR, CONFIG_DIR } from '../shared/config.mjs'
@@ -145,13 +146,25 @@ console.log(`\n报告：${reportPath}`)
 
 if (args.promote) {
   const pickFinal = args.promote === 'final'
-  const rec = pickFinal ? recFinal : recRaw
+  // --at=X 用指定阈值（而不是"约束下 recall 最高"的那个）：产品代价不对称时，
+  // 自动推荐未必是想要的——错并很贵，漏并很便宜。
+  const forced = args.at !== undefined ? Number(args.at) : null
+  const rowsFor = pickFinal ? finalT.data : rawT.data
+  const rec = forced !== null
+    ? (() => {
+        const c = confusion(rowsFor, forced)
+        return { threshold: forced, ...c, hard: hardNegativeFpr(rowsFor, forced) }
+      })()
+    : (pickFinal ? recFinal : recRaw)
   const p = path.join(CONFIG_DIR, 'thresholds.json')
   const cfg = existsSync(p) ? JSON.parse(readFileSync(p, 'utf8')) : {}
   cfg.link = cfg.link || {}
   cfg.link = {
     ...cfg.link,
-    [`${pickFinal ? 'final' : 'same_event'}_min`]: rec ? rec.threshold : null,
+    // 线上只读 same_event_min（作用于补强后的 final 分数）；final_min 保留同值，方便对照
+    same_event_min: rec ? rec.threshold : cfg.link.same_event_min,
+    final_min: rec ? rec.threshold : cfg.link.final_min,
+    state: rec ? 'calibrated' : 'uncalibrated',
     provenance: {
       task: TASK,
       dataset: path.relative(process.cwd(), FILE),
@@ -159,7 +172,7 @@ if (args.promote) {
       positives: pos,
       hard_negatives: hard,
       report: path.relative(process.cwd(), reportPath),
-      chosen: rec ? { threshold: rec.threshold, precision: rec.precision, recall: rec.recall, f1: rec.f1, hard_fpr: rec.hard.fpr } : null,
+      chosen: rec ? { threshold: rec.threshold, precision: rec.precision, recall: rec.recall, f1: rec.f1, hard_fpr: rec.hard.fpr, forced: forced !== null } : null,
       at: new Date().toISOString()
     }
   }
