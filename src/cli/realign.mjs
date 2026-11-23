@@ -1,9 +1,9 @@
-// knowledge/realign.mjs — 锚点重对齐：句子 ↔ 故事事实（embedding + Jev），修复丢失/错位的锚点
+// cli/realign.mjs — 锚点重对齐：句子 ↔ 故事事实（embedding + Jev），修复丢失/错位的锚点
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
-import { openDb } from '../../shared/db.mjs'
-import { decide } from '../../providers/jev.mjs'
-import { embedBatch } from '../../providers/embed.mjs'
+import { openDb } from '../shared/db.mjs'
+import { decide } from '../providers/jev.mjs'
+import { embedBatch } from '../providers/embed.mjs'
 
 const db = openDb()
 const ONLY = process.env.STORIES ? process.env.STORIES.split(',') : null
@@ -21,7 +21,7 @@ for (const sid of stories) {
   const available = db.prepare(`SELECT COUNT(DISTINCT f.id) c FROM story_item si JOIN claim c ON c.item_id=si.item_id JOIN fact f ON f.id=c.fact_id WHERE si.story_id=?`).get(sid).c
   if (!available || anchors >= Math.max(3, available * 0.6)) continue
   const facts = db.prepare(`SELECT DISTINCT f.id,f.canonical_text FROM story_item si JOIN claim c ON c.item_id=si.item_id JOIN fact f ON f.id=c.fact_id
-    WHERE si.story_id=? AND c.status!='meta'`).all(sid)
+    WHERE si.story_id=? AND COALESCE(c.status,'')!='meta'`).all(sid)
   if (facts.length < 2) continue
   const sents = []
   const re = /[^。！？\n]+[。！？]?/g
@@ -46,7 +46,7 @@ for (const sid of stories) {
   if (pairs.length) { try { const r = await decide({ state, questions, timeoutMs: 120000 }); answers = r.answers || {} } catch {} }
   const accepted = pairs.filter((p, k) => (answers['q' + k]?.noul ?? 0) >= 0.6)
   if (!accepted.length) continue
-  db.exec('BEGIN')
+  db.exec('BEGIN IMMEDIATE')
   try {
     db.prepare('DELETE FROM story_fact WHERE story_id=?').run(sid)
     const ins = db.prepare('INSERT OR REPLACE INTO story_fact(story_id,fact_id,section_id,char_start,char_end,role,order_idx) VALUES (?,?,?,?,?,?,?)')

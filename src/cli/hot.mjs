@@ -1,18 +1,19 @@
 // cli/hot.mjs — 热榜跟踪：抓 newsnow 各平台，记录排名历史与热度
 //
 // 用法：
-//   node hot_track.mjs                          # 抓全部平台，入库并打印 Top
-//   node hot_track.mjs --platforms weibo,zhihu  # 只抓指定平台
-//   node hot_track.mjs --top 20                 # 打印前 N
-//   node hot_track.mjs --promote 3 --platform thepaper   # 把前 3 条文章入队（走完整正文抽取）
+//   node src/cli/hot.mjs                          # 抓全部平台，入库并打印 Top
+//   node src/cli/hot.mjs --platforms weibo,zhihu  # 只抓指定平台
+//   node src/cli/hot.mjs --top 20                 # 打印前 N
+//   node src/cli/hot.mjs --promote 3 --platform thepaper   # 把前 3 条文章入队（走完整正文抽取）
 import { mkdirSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { createHash } from 'node:crypto'
 import { openDb, nowIso } from '../shared/db.mjs'
 import { fetchHot, PLATFORMS } from '../domains/ingest/adapters/newsnow.mjs'
-import { enqueue } from '../domains/ingest/queue.mjs'
+import { tryEnqueue } from '../domains/ingest/queue.mjs'
+import { outPath } from '../shared/config.mjs'
 
-const HERE = path.dirname(new URL(import.meta.url).pathname)
+const HERE = import.meta.dirname
 const argv = process.argv.slice(2)
 const arg = (k, d = null) => {
   const eq = argv.find(a => a.startsWith('--' + k + '='))
@@ -79,7 +80,7 @@ for (const e of all) {
 db.prepare('INSERT OR REPLACE INTO hot_crawl(at,platforms,entries,errors) VALUES (?,?,?,?)')
   .run(at, targets.length, saved, errors.length ? JSON.stringify(errors) : null)
 
-const dir = path.join(HERE, 'out/hot'); mkdirSync(dir, { recursive: true })
+const dir = outPath('hot'); mkdirSync(dir, { recursive: true })
 const file = path.join(dir, `hot-${at.slice(0, 16).replace(/[:T]/g, '')}.json`)
 writeFileSync(file, JSON.stringify({ at, platforms: targets.map(p => p.id), entries: all.length, rows, errors }, null, 2))
 
@@ -99,7 +100,8 @@ if (promoteN > 0) {
     : fresh.filter(e => !/weibo\.com|zhihu\.com|douyin\.com|bilibili\.com|tieba\.baidu\.com/.test(e.url))
   const picked = pool.sort((a, b) => b.heat - a.heat).slice(0, promoteN)
   for (const e of picked) {
-    const q = enqueue(db, e.url, 'hot')
+    const q = tryEnqueue(db, e.url, 'hot')
+    if (!q) continue
     db.prepare('UPDATE hot_entry SET promoted_item_id=? WHERE id=?').run(q.id, e.id)
     if (!q.reused) promotedUrls.push(e.url)
     if (!jsonMode) console.log(`+ 入队 ${e.title.slice(0, 40)}  ${q.reused ? '(已存在)' : q.id}`)

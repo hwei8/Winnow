@@ -1,13 +1,14 @@
 // cli/export.mjs — 知识库导出（Markdown + JSON）
-//   node export.mjs [--out=out/export] [--limit=0]
+//   node src/cli/export.mjs [--out=out/export] [--limit=0]
 import { mkdirSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { openDb, ROOT, nowIso } from '../shared/db.mjs'
+import { OUT_DIR, localDate } from '../shared/config.mjs'
 
 const arg = (n, d) => { const h = process.argv.find(a => a.startsWith(`--${n}=`)); return h ? h.split('=').slice(1).join('=') : d }
 const db = openDb()
-const day = new Date().toISOString().slice(0, 10)
-const outDir = path.resolve(ROOT, arg('out', path.join('out', 'export')), day)
+const day = localDate()
+const outDir = path.resolve(ROOT, arg('out', path.join(OUT_DIR, 'export')), day)
 mkdirSync(path.join(outDir, 'stories'), { recursive: true })
 
 const stories = db.prepare(`SELECT id,title,category,body_md,first_seen_ts,last_update_ts,status,story_kind FROM story ORDER BY last_update_ts DESC`).all()
@@ -26,7 +27,7 @@ writeFileSync(path.join(outDir, 'knowledge_state.json'), JSON.stringify(knowledg
 
 const byDay = {}
 for (const s of stories) {
-  const d = s.first_seen_ts ? new Date(s.first_seen_ts * 1000).toISOString().slice(0, 10) : 'unknown'
+  const d = s.first_seen_ts ? localDate(new Date(s.first_seen_ts * 1000)) : 'unknown'
   ;(byDay[d] ||= []).push(s)
 }
 for (const [d, list] of Object.entries(byDay)) {

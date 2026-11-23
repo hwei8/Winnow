@@ -1,6 +1,6 @@
-// story/apply-consolidate.mjs — 对存在追加堆积的 Story 执行节合并（真实应用）
-import { openDb } from '../../shared/db.mjs'
-import { consolidateSections } from './consolidate.mjs'
+// cli/apply-consolidate.mjs — 对存在追加堆积的 Story 执行节合并（真实应用）
+import { openDb } from '../shared/db.mjs'
+import { consolidateSections } from '../domains/story/consolidate.mjs'
 
 const db = openDb()
 const stories = db.prepare(`SELECT x.story_id, COUNT(*) n FROM story_section x JOIN story s ON s.id=x.story_id

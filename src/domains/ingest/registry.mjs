@@ -41,11 +41,11 @@ export async function collect (db, { adapter, limit = 10, source = null, cursor 
     } catch (e) { errors.push({ url: ref.url, error: String(e.message).slice(0, 80) }) }
   }
   const health = { ok: errors.length < refs.length, latencyMs: Date.now() - t0, listCount: refs.length, saved: saved.length, errors: errors.length }
+  // adapter_health 由 shared/schema.mjs 定义；写健康记录失败不影响采集结果，但要留痕
   try {
-    db.exec(`CREATE TABLE IF NOT EXISTS adapter_health (adapter TEXT, checked_at TEXT, ok INTEGER, latency_ms INTEGER, detail TEXT, PRIMARY KEY(adapter, checked_at))`)
     db.prepare('INSERT OR REPLACE INTO adapter_health(adapter,checked_at,ok,latency_ms,detail) VALUES (?,?,?,?,?)')
       .run(adapter, new Date().toISOString(), health.ok ? 1 : 0, health.latencyMs, JSON.stringify({ list: refs.length, saved: saved.length, errors: errors.slice(0, 5) }))
-  } catch {}
+  } catch (e) { console.error('[registry] adapter_health write failed:', String(e.message).slice(0, 120)) }
   return { adapter, refs: refs.length, saved, errors, health }
 }
 

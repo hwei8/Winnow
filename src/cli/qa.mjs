@@ -1,8 +1,9 @@
-// story/qa.mjs — QA v3：跨 Story 重复/并入惩罚 + 片段不合格 + 事件关联
+// cli/qa.mjs — QA v3：跨 Story 重复/并入惩罚 + 片段不合格 + 事件关联
 import { writeFileSync } from 'node:fs'
 import path from 'node:path'
-import { openDb, ROOT, nowIso } from '../../shared/db.mjs'
-import { decide } from '../../providers/jev.mjs'
+import { openDb, ROOT, nowIso } from '../shared/db.mjs'
+import { decide } from '../providers/jev.mjs'
+import { outFile } from '../shared/config.mjs'
 
 const db = openDb()
 const CONC = Number(process.env.CONC || 8)
@@ -19,7 +20,7 @@ async function qa (story) {
   const links = db.prepare('SELECT DISTINCT fact_id FROM story_fact WHERE story_id=?').all(story.id).map(r => r.fact_id)
   const available = db.prepare(`SELECT DISTINCT f.id,f.canonical_text,f.support_count FROM story_item si
     JOIN claim c ON c.item_id=si.item_id JOIN fact f ON f.id=c.fact_id
-    WHERE si.story_id=? AND c.status!='meta'`).all(story.id)
+    WHERE si.story_id=? AND COALESCE(c.status,'')!='meta'`).all(story.id)
   const used = new Set(links)
   const availSet = new Set(available.map(f => f.id))
   const covered = [...used].filter(id => availSet.has(id))
@@ -96,7 +97,7 @@ async function worker () {
 const t0 = Date.now()
 await Promise.all(Array.from({ length: CONC }, worker))
 const ins = db.prepare(`INSERT OR REPLACE INTO story_qa(story_id,score,coverage,dup_rate,conflict_count,anchor_count,fact_count,missed_facts,issues_json,checked_at) VALUES (?,?,?,?,?,?,?,?,?,?)`)
-db.exec('BEGIN')
+db.exec('BEGIN IMMEDIATE')
 try { for (const r of results) if (!r.error) ins.run(r.story_id, r.score, r.coverage_all, r.dup_rate, r.conflicts, r.anchors, r.facts_available, r.facts_available - r.anchors, JSON.stringify({ ...r.issues, duplicate: r.duplicate, snippet: r.snippet, merged_into: r.merged_into, external_facts: r.external_facts, anchor_mismatch: r.anchor_mismatch }), nowIso()); db.exec('COMMIT') } catch (e) { db.exec('ROLLBACK'); throw e }
 
 const ok = results.filter(r => !r.error)
@@ -112,6 +113,6 @@ const summary = {
   worst_active: active.sort((a, b) => a.score - b.score).slice(0, 6).map(r => ({ title: r.title.slice(0, 32), score: r.score, cov: r.coverage_all, align: r.title_align, dup: r.dup_rate })),
   seconds: Math.round((Date.now() - t0) / 1000)
 }
-writeFileSync(path.join(ROOT, 'out', 'story-qa.json'), JSON.stringify({ summary, results }, null, 1))
+writeFileSync(outFile('story-qa.json'), JSON.stringify({ summary, results }, null, 1))
 console.log(JSON.stringify(summary, null, 1))
 db.close()

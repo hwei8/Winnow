@@ -3,28 +3,21 @@ import { readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { openDb, ROOT, nowIso } from '../shared/db.mjs'
 import { decide } from '../providers/jev.mjs'
+import { embedBatch } from '../providers/embed.mjs'
+import { outFile } from '../shared/config.mjs'
 
 const db = openDb()
 const DRY = process.env.DRY !== '0'
 const CONC = Number(process.env.CONC || 6)
-const KEY = readFileSync(path.join(ROOT, '.secrets', 'openrouter.key'), 'utf8').trim()
 const CAND_TH = Number(process.env.CAND_TH || 0.62)
 const covTh = 0.85, gapTh = 0.70
 
 const stories = db.prepare("SELECT id,title,body_md,category FROM story WHERE body_md IS NOT NULL AND body_md != ''").all()
-const cacheFile = path.join(ROOT, 'out', 'story-vectors.json')
+const cacheFile = outFile('story-vectors.json')
 let cache = {}
 try { cache = JSON.parse(readFileSync(cacheFile, 'utf8')) } catch {}
-async function embed (texts) {
-  const out = []
-  for (let i = 0; i < texts.length; i += 32) {
-    const res = await fetch('https://openrouter.ai/api/v1/embeddings', { method: 'POST', headers: { Authorization: `Bearer ${KEY}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ model: 'baai/bge-m3', input: texts.slice(i, i + 32) }) })
-    const d = await res.json()
-    if (!d.data) throw new Error(JSON.stringify(d).slice(0, 120))
-    out.push(...d.data.map(x => x.embedding))
-  }
-  return out
-}
+// 统一走 providers/embed（密钥、provider 切换、批量与超时都在那里）
+const embed = (texts) => embedBatch(texts)
 const need = stories.filter(s => !cache[s.id])
 if (need.length) {
   const vecs = await embed(need.map(s => s.body_md.slice(0, 2000)))
@@ -91,7 +84,7 @@ const updates = results.filter(r => r.same_event >= 0.7 && r.gap.length > 0 && r
 const overlaps = results.filter(r => r.same_event >= 0.7 && r.gap.length > 3 && r.overlap < 0.8)
 const related = results.filter(r => r.same_event >= 0.5 && r.same_event < 0.7)
 const out = { dry_run: DRY, stories: data.length, candidates: cands.length, duplicates: duplicates.length, updates: updates.length, overlaps: overlaps.length, related: related.length, duplicate_examples: duplicates.slice(0, 15), update_examples: updates.slice(0, 10), overlap_examples: overlaps.slice(0, 6), related_examples: related.slice(0, 8) }
-writeFileSync(path.join(ROOT, 'out', 'story-link.json'), JSON.stringify({ summary: out, results }, null, 1))
+writeFileSync(outFile('story-link.json'), JSON.stringify({ summary: out, results }, null, 1))
 
 if (!DRY) {
   const upd = db.prepare('UPDATE story SET status=?, merged_into=?, story_kind=? WHERE id=?')

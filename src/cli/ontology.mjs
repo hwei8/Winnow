@@ -1,7 +1,7 @@
 // cli/ontology.mjs — 本体演化：候选提案（重复实体合并 / 罕见谓词复核）
-//   node ontology.mjs --propose
-//   node ontology.mjs --list
-//   node ontology.mjs --approve=ID | --reject=ID
+//   node src/cli/ontology.mjs --propose
+//   node src/cli/ontology.mjs --list
+//   node src/cli/ontology.mjs --approve=ID | --reject=ID
 import { randomUUID } from 'node:crypto'
 import { openDb, nowIso } from '../shared/db.mjs'
 

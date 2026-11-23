@@ -3,7 +3,7 @@ import { readFileSync, existsSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
-import { env, envLegacy } from '../shared/config.mjs'
+import { env, envLegacy, readSecret, LLM_CHAT_MODEL } from '../shared/config.mjs'
 
 const ENDPOINT = 'https://opencode.ai/inference/go/openai/v1/chat/completions'
 // 凭据文件：DSH_HOME/.credentials.yaml（默认 ~/.dsh/.credentials.yaml），可用 WINNOW_CREDENTIALS_FILE 直指
@@ -12,8 +12,9 @@ const CREDENTIALS = envLegacy('WINNOW_CREDENTIALS_FILE', 'IM_CREDENTIALS_FILE') 
 const SESSION = randomUUID()
 
 function apiKey () {
-  const fromEnv = env('OPENCODE_GO_API_KEY')
-  if (fromEnv) return fromEnv
+  // 顺序：环境变量 → .secrets/opencode-go.key → DSH 凭据文件
+  const direct = readSecret('OPENCODE_GO_API_KEY', 'opencode-go.key')
+  if (direct) return direct
   if (!existsSync(CREDENTIALS)) throw new Error(`OPENCODE_GO_API_KEY not set and ${CREDENTIALS} not found`)
   const m = readFileSync(CREDENTIALS, 'utf8').match(/^\s*OPENCODE_GO_API_KEY:\s*(\S+)\s*$/m)
   if (!m) throw new Error('OPENCODE_GO_API_KEY not found in credentials file')
@@ -24,7 +25,17 @@ function apiKey () {
 let cachedKey = null
 function key () { return (cachedKey ??= apiKey()) }
 
-export async function chat ({ messages, model = 'deepseek-v4.1-flash', maxTokens = 6000, json = false, temperature = 0, timeoutMs = 180000, retries = Number(process.env.LLM_RETRIES || 6) }) {
+// 只有这些错误值得重试：限流、上游过载/网关、超时与网络中断。
+// 400/401/403/404/422 之类重试也不会成功，只会白白等上十几秒（6 次 × 递增退避）。
+export function isRetryable (err) {
+  const msg = String(err?.message ?? err)
+  if (err?.name === 'AbortError' || err?.name === 'TimeoutError') return true
+  if (/HTTP (408|409|425|429|5\d\d)\b/.test(msg)) return true
+  if (/overloaded|fetch failed|ECONNRESET|ETIMEDOUT|ECONNREFUSED|EAI_AGAIN|socket hang up|Unexpected end of JSON/i.test(msg)) return true
+  return false
+}
+
+export async function chat ({ messages, model = LLM_CHAT_MODEL, maxTokens = 6000, json = false, temperature = 0, timeoutMs = 180000, retries = Number(process.env.LLM_RETRIES || 6) }) {
   const body = { model, messages, max_tokens: maxTokens, temperature }
   if (json) body.response_format = { type: 'json_object' }
   let lastErr
@@ -65,13 +76,16 @@ export async function chat ({ messages, model = 'deepseek-v4.1-flash', maxTokens
       }
     } catch (e) {
       lastErr = e
-      const retryable = /HTTP 429|overloaded|HTTP 502|HTTP 503|HTTP 504/.test(String(e.message))
-      await new Promise(r => setTimeout(r, Math.min(20000, (retryable ? 3000 : 800) * attempt)))
+      if (!isRetryable(e)) break
+      if (attempt < retries) {
+        const backoff = /HTTP 429|overloaded/.test(String(e.message)) ? 3000 : 1000
+        await new Promise(r => setTimeout(r, Math.min(20000, backoff * attempt)))
+      }
     } finally {
       clearTimeout(timer)
     }
   }
-  throw new Error(`chat failed after ${retries} attempts: ${lastErr?.message}`)
+  throw new Error(`chat failed: ${lastErr?.message}`)
 }
 
 // 从可能带 ```json 包裹/前后废话的输出里取出第一个完整 JSON 对象

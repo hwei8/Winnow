@@ -6,7 +6,7 @@
 // 因此不存在"SSR 一套、客户端一套"的重复实现。
 // 所有插值都必须经过 esc()。
 
-import { esc, clip } from './fmt.mjs'
+import { esc, clip, safeUrl } from './fmt.mjs'
 
 /* ── 基础零件 ─────────────────────────────────────────────────── */
 
@@ -42,7 +42,7 @@ function frameThumbHtml(claim) {
   if (!claim?.frame_url) return ''
   const cap = claim.time_label || ''
   return `<button class="thumb" type="button" data-full="${esc(claim.frame_url)}" data-cap="${esc(cap)}" title="点击查看大图">
-      <img src="${esc(claim.frame_url)}" alt="证据截图 ${esc(cap)}" loading="lazy" onerror="this.closest('.thumb').remove()">
+      <img src="${esc(claim.frame_url)}" alt="证据截图 ${esc(cap)}" loading="lazy">
       <span class="thumb-cap">${esc(cap)}</span>
     </button>`
 }
@@ -106,7 +106,7 @@ function cardClaimLine(claim, story) {
   return `<li class="c-claim">
       ${kindHtml(claim)}
       ${dotsHtml(claim.confidence_pct)}
-      <a class="c-claim-text" href="${esc(href)}">${esc(clip(claim.text, 132))}</a>
+      <a class="c-claim-text" href="${esc(safeUrl(href))}">${esc(clip(claim.text, 132))}</a>
     </li>`
 }
 
@@ -126,7 +126,7 @@ export function storyCard(story) {
     ? `<ul class="c-items">${items
         .map(
           (it) =>
-            `<li><a href="${esc(url)}">${esc(clip(it.title || '未命名条目', 80))}</a>${
+            `<li><a href="${esc(safeUrl(url))}">${esc(clip(it.title || '未命名条目', 80))}</a>${
               it.author ? `<span class="dim">· ${esc(it.author)}</span>` : ''
             }</li>`
         )
@@ -141,7 +141,7 @@ export function storyCard(story) {
 
   return `<article class="card" data-story="${esc(s.id)}">
     <div class="c-head">
-      <h2 class="c-title"><a href="${esc(url)}">${esc(s.title || '未命名事件')}</a></h2>
+      <h2 class="c-title"><a href="${esc(safeUrl(url))}">${esc(s.title || '未命名事件')}</a></h2>
       <div class="c-meta">
         <span class="pill">${esc(s.status_label || '—')}</span>
         ${s.validated ? '<span class="pill pill-ok">已验证</span>' : ''}
@@ -285,7 +285,7 @@ function itemHeadHtml(item) {
       <div class="item-meta">${meta}</div>
       <div class="item-actions">
         <button class="btn btn-xs" type="button" data-transcript="${esc(item.id)}">转写预览</button>
-        ${item.url ? `<a class="btn btn-xs" href="${esc(item.url)}" target="_blank" rel="noopener">原视频 ↗</a>` : ''}
+        ${item.url ? `<a class="btn btn-xs" href="${esc(safeUrl(item.url))}" target="_blank" rel="noopener noreferrer">原视频 ↗</a>` : ''}
       </div>
     </div>`
 }
@@ -360,7 +360,7 @@ export function topicsMain ({ topics = [], beat = null } = {}) {
   </tr>`).join('')
   const beatHtml = beat ? `<section class="panel"><h2 class="panel-title">Beat 报告（${esc((beat.generated_at || '').slice(0, 16).replace('T', ' '))}）</h2>
     ${beat.findings.map(f => `<div class="beat-item"><b>${esc(f.topic)}</b> <span class="dim">${esc(f.coverage.stories)} Story · ${esc(f.coverage.claims)} claim · ${esc(f.coverage.sources)} 源${f.coverage.gap ? ' · ' + esc(f.coverage.gap) : ''}</span>
-      ${f.missing.length ? `<ul class="side-list">${f.missing.map(m => `<li><a href="${esc(m.url)}" target="_blank" rel="noopener">${esc(clip(m.title, 50))}</a><span class="dim"> ${esc(m.at || '')}</span> <button class="btn btn-sm" type="button" data-ingest="${esc(m.url)}">入库</button></li>`).join('')}</ul>` : ''}
+      ${f.missing.length ? `<ul class="side-list">${f.missing.map(m => `<li><a href="${esc(safeUrl(m.url))}" target="_blank" rel="noopener noreferrer">${esc(clip(m.title, 50))}</a><span class="dim"> ${esc(m.at || '')}</span> <button class="btn btn-sm" type="button" data-ingest="${esc(m.url)}">入库</button></li>`).join('')}</ul>` : ''}
       ${f.suggestions.length ? `<p class="dim">建议：${esc(f.suggestions.join('；'))}</p>` : ''}</div>`).join('') || '<p class="dim">无兴趣主题，先声明关注。</p>'}
   </section>` : ''
   return `
@@ -642,7 +642,7 @@ function storyEvidence (data) {
     <ul class="evidence-list">${claims.map(c => `<li>
       <div class="ev-row"><span class="dim">${esc((c.confidence_pct ?? 0) + '%')}</span>${c.status === 'contested' ? '<span class="pill pill-bad">有争议</span>' : ''}<p class="ev-text">${esc(c.text)}</p></div>
       <div class="ev-actions"><button class="btn btn-sm" type="button" data-annot="claim" data-annot-id="${esc(c.id)}" data-annot-kind="wrong">这条错了</button>
-      ${c.item_url ? `<a class="dim" href="${esc(c.item_url)}" target="_blank" rel="noopener">原文</a>` : ''}</div>
+      ${c.item_url ? `<a class="dim" href="${esc(safeUrl(c.item_url))}" target="_blank" rel="noopener noreferrer">原文</a>` : ''}</div>
     </li>`).join('')}</ul>
   </section>`
 }
@@ -672,7 +672,7 @@ function storyArticle(data) {
     .join('')
   const srcList = items
     .slice(0, 20)
-    .map((it) => `<li><a href="${esc(it.url || '#')}" target="_blank" rel="noopener">${esc(clip(it.title, 40))}</a><span class="dim">${esc(it.source || '')}</span></li>`)
+    .map((it) => `<li><a href="${esc(safeUrl(it.url))}" target="_blank" rel="noopener noreferrer">${esc(clip(it.title, 40))}</a><span class="dim">${esc(it.source || '')}</span></li>`)
     .join('')
   const bodyHtml = renderStoryBody(story.body, spans)
     .replace(/<h2 class="story-h2">/g, (m) => m) // 保持
@@ -845,7 +845,7 @@ export function entityMain(data) {
   const storiesHtml = stories.length
     ? stories
         .map(
-          (s) => `<li><a href="${esc(s.url)}">${esc(clip(s.title, 40))}</a>
+          (s) => `<li><a href="${esc(safeUrl(s.url))}">${esc(clip(s.title, 40))}</a>
             <span class="dim">${esc(s.item_count)} 条目 · ${esc(s.claim_count)} claim${s.updated_label ? ` · ${esc(s.updated_label)}` : ''}</span></li>`
         )
         .join('')
@@ -881,20 +881,20 @@ export function entityMain(data) {
 
 /* ── 搜索面板（客户端渲染）────────────────────────────────────── */
 
-function highlight(text, q) {
-  const safe = esc(text)
-  const terms = String(q || '')
-    .trim()
-    .split(/\s+/)
-    .filter((t) => t.length >= 2)
-  if (!terms.length) return safe
-  let out = safe
-  for (const term of terms) {
-    const pattern = esc(term).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-    if (!pattern) continue
-    out = out.replace(new RegExp(pattern, 'gi'), (m) => `<mark>${m}</mark>`)
+// 在原文上找命中，再分段转义：不会把 <mark> 插进实体（&amp;）或上一轮插入的标签里
+export function highlight(text, q) {
+  const raw = String(text ?? '')
+  const terms = [...new Set(String(q || '').trim().split(/\s+/).filter((t) => t.length >= 2))]
+  if (!terms.length) return esc(raw)
+  const re = new RegExp(terms.map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|'), 'gi')
+  let out = ''
+  let pos = 0
+  for (const m of raw.matchAll(re)) {
+    if (!m[0]) continue
+    out += esc(raw.slice(pos, m.index)) + `<mark>${esc(m[0])}</mark>`
+    pos = m.index + m[0].length
   }
-  return out
+  return out + esc(raw.slice(pos))
 }
 
 export function searchResultsHtml(data) {
@@ -915,7 +915,7 @@ export function searchResultsHtml(data) {
     .map(
       (r) => `<li class="sp-row">
         <div class="sp-badges">${kindHtml(r)}${dotsHtml(r.confidence_pct)}${timeHtml(r)}</div>
-        <a class="sp-text" href="${esc(r.url || (r.story_url ? r.story_url : '#'))}">${highlight(r.text, q)}</a>
+        <a class="sp-text" href="${esc(safeUrl(r.url || r.story_url))}">${highlight(r.text, q)}</a>
         <div class="sp-meta">
           ${r.story_title ? `<span class="sp-story">事件：${esc(r.story_title)}</span>` : ''}
           ${r.item_title ? `<span class="dim">${esc(clip(r.item_title, 40))}</span>` : ''}
@@ -929,7 +929,7 @@ export function searchResultsHtml(data) {
     ? `<div class="sp-section-title">标题命中的条目</div><ul class="sp-items">${items
         .map(
           (it) =>
-            `<li><a href="${esc(it.url || '#')}">${highlight(clip(it.title, 60), q)}</a>
+            `<li><a href="${esc(safeUrl(it.url))}">${highlight(clip(it.title, 60), q)}</a>
               <span class="dim">${esc(it.author || '')}${it.published_label ? ` · ${esc(it.published_label)}` : ''}</span></li>`
         )
         .join('')}</ul>`

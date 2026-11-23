@@ -73,7 +73,13 @@ export async function classifyUpdate ({ db, parentId, newFactIds, itemTitle = ''
     split: { type: 'noul', instructions: 'The new facts describe a distinct sub-event that deserves its own separate story rather than being merged into this one.', criteria: { true: 'Distinct event (e.g. a separate lawsuit, a new unrelated incident) with its own lead.', false: 'Same event continued; belongs in this story.' } }
   }
   let answers = {}
-  try { const r = await decide({ state: { ...state, ...state2 }, questions: { ...questions, ...q2 } }); answers = r.answers || {} } catch {}
+  let degraded = null
+  try { const r = await decide({ state: { ...state, ...state2 }, questions: { ...questions, ...q2 } }); answers = r.answers || {} } catch (e) {
+    // Jev 不可用时所有概率都是 0，分级会悄悄落到 P3/P4。保留这种降级行为（不阻塞流水线），
+    // 但要让调用方和日志看得见：结果带 degraded，并写进 reasons。
+    degraded = String(e.message).slice(0, 120)
+    console.error('[policy] Jev unavailable, classification degraded:', degraded)
+  }
 
   let contradictions = 0, supersedes = []
   pairs.forEach((p, i) => {
@@ -113,6 +119,7 @@ export async function classifyUpdate ({ db, parentId, newFactIds, itemTitle = ''
   else if (dupRisk >= 0.5) { severity = 'P2'; action = 'rewrite'; reasons.push(`duplication risk ${dupRisk.toFixed(2)}`) }
   else if (gapCount === 0) { severity = 'P4'; action = 'none'; reasons.push('fully covered') }
   else reasons.push('incremental append')
+  if (degraded) reasons.push(`degraded: jev unavailable (${degraded})`)
 
-  return { severity, action, reasons, contradictions, supersedes, retraction: +retraction.toFixed(2), lede: +lede.toFixed(2), split: +split.toFixed(2), gapCount, appendRatio: +appendRatio.toFixed(2), updateSections, dupRisk: +dupRisk.toFixed(2) }
+  return { severity, action, reasons, degraded: !!degraded, contradictions, supersedes, retraction: +retraction.toFixed(2), lede: +lede.toFixed(2), split: +split.toFixed(2), gapCount, appendRatio: +appendRatio.toFixed(2), updateSections, dupRisk: +dupRisk.toFixed(2) }
 }

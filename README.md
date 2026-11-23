@@ -7,8 +7,8 @@
 *Personal memory & information filter — turn an endless feed into a handful of stories you can actually read, and remember what you decided to keep.*
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Node](https://img.shields.io/badge/node-%3E%3D22.5-brightgreen)](package.json)
-[![Tests](https://img.shields.io/badge/tests-19%20passing-brightgreen)](tests/)
+[![Node](https://img.shields.io/badge/node-%3E%3D22.13-brightgreen)](package.json)
+[![Tests](https://img.shields.io/badge/tests-55%20passing-brightgreen)](tests/)
 
 ---
 
@@ -96,11 +96,11 @@ src/cli  ─┼─→ src/domains/*  ─→ src/providers/*  ─→ src/shared
 |---|---|
 | ![entity](docs/assets/screenshots/03-entity.png) | ![search](docs/assets/screenshots/04-search.png) |
 
-十一页：`/` 无限流 · `/story/:id` 详情（事实锚点 + 证据 + 时间线） · `/entity/:id` · `/topics` 覆盖地图 · `/search` · `/claims` 数据质量 · `/brief` 简报 · `/memory` 我要记住的 · `/audit` 审计。
+十一页：`/` 无限流 · `/story/:id` 详情（事实锚点 + 证据 + 时间线） · `/entity/:id` · `/topics` 覆盖地图 · `/topic/:name` 主题 · `/search` · `/claims` 数据质量 · `/brief` 简报 · `/memory` 我要记住的 · `/stance` 我的立场 · `/audit` 审计。
 
 ## 快速开始
 
-**要求**：Node ≥ 22.5（用 `node:sqlite`）、一个 OpenAI 兼容的 chat 端点、一个 embedding 端点。
+**要求**：Node ≥ 22.13（用 `node:sqlite`）、一个 OpenAI 兼容的 chat 端点、一个 embedding 端点。
 
 ```bash
 git clone <this-repo> winnow
@@ -118,7 +118,7 @@ npm run pipeline -- --adapter=rss --limit=20
 npm run web
 ```
 
-打开 `http://127.0.0.1:3083/`。
+打开 `http://127.0.0.1:3083/`。默认只监听本机；要在局域网 / 手机上访问，见 [docs/operations.md「Web 安全」](docs/operations.md#web-安全)（`HOST=0.0.0.0` 时必须设置 `WINNOW_WEB_TOKEN`）。
 
 ### 从零到第一篇 Story
 
@@ -128,7 +128,7 @@ npm run pipeline -- --urls=https://example.com/article
 
 # 2) 看抽出了什么事实
 node src/cli/link-audit.mjs            # 链接判定报告
-node src/domains/story/qa.mjs          # QA 打分
+node src/cli/qa.mjs                    # QA 打分
 
 # 3) 生成今天的简报（不发送）
 npm run brief -- --out
@@ -147,17 +147,18 @@ npm run brief -- --send
 | `npm run brief -- --out --send` | 生成并推送每日简报 |
 | `npm run daemon -- --once` | 一次性跑 pipeline → brief → metrics |
 | `npm run health` | 依赖健康检查 |
-| `npm run db:stats` / `db:backup` | 库概览 / 一致性快照 |
-| `npm test` | 单元 + 集成测试（无需真实 key） |
+| `npm run worker` | 消费入库队列（Web「一键入库」与 `discover --enqueue` 写入的 URL） |
+| `npm run db:stats` / `db:backup` / `db:repair` | 库概览 / 一致性快照 / 幂等数据修复（先自动备份） |
+| `npm test` / `npm run check` | 单元 + 集成测试（无需真实 key）/ 语法 + import + 脚本路径静态检查 |
 
-全部 CLI 都支持 `--help` 风格的自述注释（见各文件头部），并在 `package.json` 里给出了主入口。
+每个 CLI 的用法写在文件头部注释里（`src/cli/*.mjs`），常用入口在 `package.json` 的 `scripts` 中。
 
 ## 配置与密钥
 
 **代码里没有硬编码的 key、路径或主机名。** 全部走 `src/shared/config.mjs`：
 
 - 环境变量优先；根目录 `.env` 会被自动加载（不覆盖已存在的 env）；
-- 密钥可直接放 env，也可放 `.secrets/<name>`（已在 `.gitignore`）；
+- 密钥可直接放 env，也可放 `.secrets/<name>`（已在 `.gitignore`）；所有 provider 都经 `config.readSecret()` 读取；
 - 数据源清单在 `config/feeds.json`，搜索主题在 `config/search_queries.txt`——**改源不用改代码**。
 
 ```bash
@@ -178,7 +179,7 @@ ZEN_API_KEY=...                # Jev 判定（有免费通道，失败自动兜�
 - ✅ 基于语义的更新策略（P0 撤回 → P4 无动作）、节合并、版本快照回滚
 - ✅ QA 打分、锚点校验、证据可定位率 99.9%
 - ✅ 个人层：记忆捕获、追平状态、标注、立场、深研
-- ✅ 简报三通道 + Telegram 推送 + Web 九页
+- ✅ 简报三通道 + Telegram 推送 + Web 十一页
 - ⏳ 标题层词组闸门、热度加权进简报、B 站视频源、外网镜像
 
 路线与已知缺口见 [docs/design/STATUS.md](docs/design/STATUS.md)。

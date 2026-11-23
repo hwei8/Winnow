@@ -1,15 +1,18 @@
 // cli/pipeline.mjs — 一键流水线：抓取 → 抽取 → 归簇 → 链接判定 → 建档/重写/合并 → QA → 回归报告
 //
 // 用法：
-//   node pipeline.mjs --urls=URL1,URL2                 # 指定 URL
-//   node pipeline.mjs --feed=hn --limit=8              # HN 首页自动发现
-//   node pipeline.mjs --feed=hn --limit=8 --urls=...   # 两者合并
+//   node src/cli/pipeline.mjs --urls=URL1,URL2                 # 指定 URL
+//   node src/cli/pipeline.mjs --feed=hn --limit=8              # HN 首页自动发现
+//   node src/cli/pipeline.mjs --feed=hn --limit=8 --urls=...   # 两者合并
 import { execFileSync } from 'node:child_process'
 import { writeFileSync, mkdirSync } from 'node:fs'
 import path from 'node:path'
 import { openDb, ROOT, nowIso } from '../shared/db.mjs'
+import { outFile, localDate } from '../shared/config.mjs'
 
 const HERE = import.meta.dirname
+// 子进程输出可能很长：execFileSync 默认 1MB 缓冲，超出会被杀掉并误报失败
+const MAX_BUFFER = 64 * 1024 * 1024
 const arg = (name, def = '') => {
   const hit = process.argv.find(a => a.startsWith(`--${name}=`))
   return hit ? hit.split('=').slice(1).join('=') : def
@@ -30,7 +33,7 @@ async function collectViaAdapter () {
   const args = [path.join(HERE, 'collect.mjs'), `--adapter=${ADAPTER}`, `--limit=${LIMIT}`]
   if (ADAPTER_SOURCE) args.push(`--source=${ADAPTER_SOURCE}`)
   try {
-    const out = execFileSync(process.execPath, args, { cwd: HERE, encoding: 'utf8', timeout: 10 * 60 * 1000, stdio: ['ignore', 'pipe', 'pipe'] })
+    const out = execFileSync(process.execPath, args, { cwd: ROOT, encoding: 'utf8', timeout: 10 * 60 * 1000, maxBuffer: MAX_BUFFER, stdio: ['ignore', 'pipe', 'pipe'] })
     const parsed = JSON.parse(out.trim().split('\n').filter(Boolean).at(-1) || '{}')
     return parsed
   } catch (e) {
@@ -41,7 +44,7 @@ async function collectViaAdapter () {
 // 1a) 调外部发现工具（search_discover / hot_track），解析其最后一行 JSON
 function runTool (script, extra = []) {
   try {
-    const out = execFileSync(process.execPath, [path.join(HERE, script), '--json', ...extra], { cwd: HERE, encoding: 'utf8', timeout: 10 * 60 * 1000, stdio: ['ignore', 'pipe', 'pipe'] })
+    const out = execFileSync(process.execPath, [path.join(HERE, script), '--json', ...extra], { cwd: ROOT, encoding: 'utf8', timeout: 10 * 60 * 1000, maxBuffer: MAX_BUFFER, stdio: ['ignore', 'pipe', 'pipe'] })
     const lines = out.trim().split('\n').filter(l => l.trim().startsWith('{'))
     return JSON.parse(lines.at(-1) || '{}')
   } catch (e) {
@@ -85,7 +88,7 @@ function runStep (script, env = {}) {
   const t0 = Date.now()
   try {
     const out = execFileSync(process.execPath, [path.join(HERE, script)], {
-      cwd: HERE, env: { ...process.env, ...env }, encoding: 'utf8', timeout: 30 * 60 * 1000, stdio: ['ignore', 'pipe', 'pipe']
+      cwd: ROOT, env: { ...process.env, ...env }, encoding: 'utf8', timeout: 30 * 60 * 1000, maxBuffer: MAX_BUFFER, stdio: ['ignore', 'pipe', 'pipe']
     })
     return { script, ok: true, ms: Date.now() - t0, out: out.slice(-4000) }
   } catch (e) {
@@ -105,12 +108,12 @@ if (ADAPTER) {
 }
 console.log(`[pipeline] run ${RUN_ID} | urls: ${urls.length} | items: ${collected?.saved?.length ?? 0}`)
 const steps = []
-if (collected?.saved?.length) steps.push(runStep('../domains/ingest/pipeline.mjs', { ITEMS: collected.saved.join(',') }))
-else if (urls.length) steps.push(runStep('../domains/ingest/pipeline.mjs', { URLS: urls.join(',') }))
-steps.push(runStep('../domains/ingest/finalize.mjs'))
-steps.push(runStep('../domains/story/apply-policy.mjs'))
-steps.push(runStep('../domains/story/apply-consolidate.mjs'))
-steps.push(runStep('../domains/story/qa.mjs'))
+if (collected?.saved?.length) steps.push(runStep('ingest.mjs', { ITEMS: collected.saved.join(',') }))
+else if (urls.length) steps.push(runStep('ingest.mjs', { URLS: urls.join(',') }))
+steps.push(runStep('finalize.mjs'))
+steps.push(runStep('apply-policy.mjs'))
+steps.push(runStep('apply-consolidate.mjs'))
+steps.push(runStep('qa.mjs'))
 steps.forEach(s => console.log(`  ${s.ok ? 'OK ' : 'ERR'} ${s.script} ${s.ms}ms`))
 
 // 4) 汇总
@@ -136,9 +139,9 @@ const totals = {
   snippet: db.prepare("SELECT COUNT(*) c FROM story WHERE story_kind='snippet'").get().c,
   facts: db.prepare('SELECT COUNT(*) c FROM fact').get().c
 }
-const reportPath = path.join(ROOT, 'out', 'reports', `daily-${new Date().toISOString().slice(0, 10)}.md`)
+const reportPath = outFile('reports', `daily-${localDate()}.md`)
 mkdirSync(path.dirname(reportPath), { recursive: true })
-const md = `# 每日回归报告 ${new Date().toISOString().slice(0, 10)}
+const md = `# 每日回归报告 ${localDate()}
 
 - 运行 ID：${RUN_ID}
 - 输入：${ADAPTER ? `adapter=${ADAPTER}（采集 ${collected?.saved?.length ?? 0} 条）` : `URL ${urls.length} 条`}${SEARCH_ON ? '（含搜索发现）' : ''}${HOT_N ? `（含热榜 Top ${HOT_N}）` : ''}

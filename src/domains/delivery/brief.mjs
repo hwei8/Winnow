@@ -2,6 +2,7 @@
 import { randomUUID } from 'node:crypto'
 import { openDb, nowIso } from '../../shared/db.mjs'
 import { chat, extractJson } from '../../providers/llm.mjs'
+import { localDate, PUBLIC_URL } from '../../shared/config.mjs'
 
 const CHANNELS = { must: '必看', interest: '兴趣', explore: '探索' }
 
@@ -178,7 +179,7 @@ export function renderBriefing ({ items, stats, date }) {
       if (it.what) lines.push(`   发生了什么：${it.what}`)
       if (it.what_new) lines.push(`   新在哪：${it.what_new}`)
       if (it.why_you) lines.push(`   为什么推你：${it.why_you}`)
-      lines.push(`   来源：/story/${encodeURIComponent(it.story_id)}`)
+      lines.push(`   来源：${PUBLIC_URL}/story/${encodeURIComponent(it.story_id)}`)
       lines.push('')
     })
   }
@@ -190,7 +191,7 @@ export async function generateBriefing (db, { hours = 24, count = 12 } = {}) {
   const cands = collectCandidates(db, { hours })
   const picked = scoreCandidates(db, cands)
   const items = await composeItems(db, picked)
-  const date = new Date().toISOString().slice(0, 10)
+  const date = localDate()
   const id = 'brief:' + randomUUID().slice(0, 10)
   const stats = { candidates: cands.length, must: items.filter(i => i.channel === 'must').length, interest: items.filter(i => i.channel === 'interest').length, explore: items.filter(i => i.channel === 'explore').length }
   db.prepare('INSERT OR REPLACE INTO briefing(id,date,generated_at,window_hours,items_json,stats_json) VALUES (?,?,?,?,?,?)')

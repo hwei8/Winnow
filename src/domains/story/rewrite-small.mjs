@@ -2,6 +2,7 @@
 // 不走定向/全量重写的比例闸门，改用绝对门限（覆盖≥0.95、长度≥max(250, 原文90%)、重复≤0.15）
 import { chat, extractJson } from '../../providers/llm.mjs'
 import { snapshot, restore } from './rewrite.mjs'
+import { sectionId } from './store.mjs'
 
 const DEFAULTS = { smallChars: 1000, coverageTh: 0.95, minChars: 200, lenRatio: 0.35, dupTh: 0.15, retries: 2 }
 const tri = (s) => { const x = String(s || '').toLowerCase().replace(/[\s\p{P}]/gu, ''); const t = new Set(); for (let i = 0; i < x.length - 2; i++) t.add(x.slice(i, i + 3)); return t }
@@ -33,8 +34,8 @@ export async function rewriteSmallStory ({ db, storyId, newFactIds = [], params 
   const segs = parts.map(s => {
     let text = String(s.text || '')
     const leak = new Set((s.facts || []).filter(id => valid.has(id)))
-    text = text.replace(/[（(]\s*(F\d{5}(?:\s*[、,，]\s*F\d{5})*)\s*[）)]/g, (m, ids) => { ids.split(/[、,，]/).forEach(id => { if (valid.has(id.trim())) leak.add(id.trim()) }); return '' })
-    text = text.replace(/\bF\d{5}\b/g, (m) => { if (valid.has(m)) leak.add(m); return '' })
+    text = text.replace(/[（(]\s*(F\d{5,}(?:\s*[、,，]\s*F\d{5,})*)\s*[）)]/g, (m, ids) => { ids.split(/[、,，]/).forEach(id => { if (valid.has(id.trim())) leak.add(id.trim()) }); return '' })
+    text = text.replace(/\bF\d{5,}\b/g, (m) => { if (valid.has(m)) leak.add(m); return '' })
     return { text: text.trim(), facts: [...leak] }
   }).filter(s => s.text.length > 8)
   if (!segs.length) return { error: 'empty' }
@@ -55,15 +56,15 @@ export async function rewriteSmallStory ({ db, storyId, newFactIds = [], params 
     restore(db, storyId, snap.version)
     return { rolled_back: true, coverage: +coverage.toFixed(2), chars: body.length, oldChars, dup: +dup.toFixed(2) }
   }
-  db.exec('BEGIN')
+  db.exec('BEGIN IMMEDIATE')
   try {
     db.prepare('UPDATE story SET body_md=?, last_update_ts=? WHERE id=?').run(body, Math.floor(Date.now() / 1000), storyId)
     db.prepare('DELETE FROM story_section WHERE story_id=?').run(storyId)
     db.prepare('DELETE FROM story_fact WHERE story_id=?').run(storyId)
     db.prepare('INSERT OR REPLACE INTO story_section(id,story_id,order_idx,heading,body_md,char_start,char_end) VALUES (?,?,?,?,?,?,?)')
-      .run(`${storyId}:sec1`, storyId, 0, '报道', body.replace(/\n\n$/, ''), 0, body.length)
+      .run(sectionId(storyId, 1), storyId, 0, '报道', body.replace(/\n\n$/, ''), 0, body.length)
     const ins = db.prepare('INSERT OR REPLACE INTO story_fact(story_id,fact_id,section_id,char_start,char_end,role,order_idx) VALUES (?,?,?,?,?,?,?)')
-    for (const a of anchors) ins.run(storyId, a.fid, `${storyId}:sec1`, a.a, a.b, 'asserts', order++)
+    for (const a of anchors) ins.run(storyId, a.fid, sectionId(storyId, 1), a.a, a.b, 'asserts', order++)
     db.exec('COMMIT')
   } catch (e) { db.exec('ROLLBACK'); return { error: 'write-failed' } }
   return { ok: true, small: true, chars: body.length, oldChars, coverage: +coverage.toFixed(2), dup: +dup.toFixed(2), anchors: anchors.length }

@@ -1,7 +1,7 @@
 // cli/collect.mjs — adapter 采集 CLI
-//   node collect.mjs --adapter=hn --limit=5
-//   node collect.mjs --adapter=rss --limit=5 --source=src:36kr
-//   node collect.mjs --health=hn
+//   node src/cli/collect.mjs --adapter=hn --limit=5
+//   node src/cli/collect.mjs --adapter=rss --limit=5 --source=src:36kr
+//   node src/cli/collect.mjs --health=hn
 import { openDb } from '../shared/db.mjs'
 import { collect, healthCheck, listAdapters } from '../domains/ingest/registry.mjs'
 

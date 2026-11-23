@@ -2,6 +2,7 @@
 import { openDb, nowIso } from '../shared/db.mjs'
 import { extractMainText } from '../domains/ingest/extract.mjs'
 import { blockText } from '../domains/ingest/feed.mjs'
+import { safeFetchText } from '../shared/net.mjs'
 
 const db = openDb()
 const UA = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36'
@@ -19,14 +20,13 @@ const insBlock = db.prepare('INSERT OR REPLACE INTO item_block(item_id,idx,text,
 const report = []
 async function fetchOne (it) {
   try {
-    const res = await fetch(it.url, { headers: { 'user-agent': UA, accept: 'text/html,application/xhtml+xml' }, signal: AbortSignal.timeout(25000) })
-    if (!res.ok) return { id: it.id, error: 'HTTP ' + res.status }
-    const ct = res.headers.get('content-type') || ''
-    if (!/text\/html|application\/xhtml/.test(ct)) return { id: it.id, error: 'not-html' }
-    const blocks = extractMainText(await res.text()).filter(b => b.length >= 60)
+    // 条目 URL 不可信：走公网校验 + 重定向逐跳校验 + 大小上限
+    const res = await safeFetchText(it.url, { headers: { 'user-agent': UA, accept: 'text/html,application/xhtml+xml' }, timeout: 25000 })
+    if (!/text\/html|application\/xhtml/.test(res.contentType)) return { id: it.id, error: 'not-html' }
+    const blocks = extractMainText(res.text).filter(b => b.length >= 60)
     const text = blockText(blocks)
     if (text.length < 300) return { id: it.id, error: 'too-short', chars: text.length }
-    db.exec('BEGIN')
+    db.exec('BEGIN IMMEDIATE')
     try {
       db.prepare('DELETE FROM item_block WHERE item_id=?').run(it.id)
       let off = 0

@@ -1,6 +1,6 @@
-// story/regression.mjs — 真实更新回归：对已入库的 update item 用当前策略重新分级（只判定不执行）
-import { openDb } from '../../shared/db.mjs'
-import { classifyUpdate } from './policy.mjs'
+// cli/policy-regression.mjs — 真实更新回归：对已入库的 update item 用当前策略重新分级（只判定不执行）
+import { openDb } from '../shared/db.mjs'
+import { classifyUpdate } from '../domains/story/policy.mjs'
 
 const db = openDb()
 const rows = db.prepare(`SELECT d.item_id, d.parent_story_id, d.action, d.same_event, d.gap_count, i.title

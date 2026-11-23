@@ -1,5 +1,5 @@
 // cli/revalidate.mjs — 周期重验证：找出需要复核的 claim/Story
-//   node revalidate.mjs --days=90 --limit=200
+//   node src/cli/revalidate.mjs --days=90 --limit=200
 import { randomUUID } from 'node:crypto'
 import { openDb, nowIso } from '../shared/db.mjs'
 

@@ -1,10 +1,15 @@
-// server.mjs —— Winnow 只读浏览服务器
+// server.mjs —— Winnow Web 服务（SSR 浏览 + 少量写接口）
 //
-//   node web/server.mjs            # 默认 0.0.0.0:3083
-//   PORT=3083 HOST=0.0.0.0 node web/server.mjs
+//   npm run web                                    # 默认 127.0.0.1:3083（只本机可访问）
+//   HOST=0.0.0.0 WINNOW_WEB_TOKEN=xxx npm run web  # 暴露到局域网时必须设令牌
 //
-// 只用 Node 24 内置模块（node:http / node:sqlite / node:fs / node:path / node:url）。
-// 数据层全部只读，见 queries.mjs。页面首屏由服务端渲染，浏览器只负责交互增强。
+// 只用 Node 内置模块。浏览走只读连接（queries.mjs）；写入集中在 write.mjs，只能经 POST /api/* 触发。
+//
+// 安全模型（没有登录系统，所以分三层兜住）：
+//   1. 默认只监听 127.0.0.1；
+//   2. Host 头白名单：挡 DNS rebinding（恶意域名解析到 127.0.0.1 后以"同源"身份访问）；
+//   3. 写接口只接受 application/json 且来源同源（Origin / Sec-Fetch-Site），挡跨站请求伪造；
+//   4. 可选 WINNOW_WEB_TOKEN：设置后所有请求都要带令牌（Bearer / cookie / 首次 ?token=）。
 
 import http from 'node:http'
 import { readFile, stat } from 'node:fs/promises'
@@ -13,19 +18,23 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import os from 'node:os'
 
-import { getStats, getStream, getStory, getStoryFacts, getEntity, getLatestBriefing, getStances, getAnnotationStats, getSearchPage, getClaimIssues, getAudit, getTopics, getTopicPage, getLatestBeat, search, getItem, SUMMARY_ROOT, DB_PATH } from './queries.mjs'
-import { createCapture, setKnowledgeState, addAnnotation, listCaptures, createResearch, toggleInterest, runBeat, enqueueIngest } from './write.mjs'
+import { getStats, getStream, getStory, getStoryFacts, getEntity, getLatestBriefing, getStances, getAnnotationStats, getSearchPage, getClaimIssues, getAudit, getTopics, getTopicPage, getLatestBeat, search, getItem, SUMMARY_ROOT, DB_PATH, closeDb } from './queries.mjs'
+import { createCapture, setKnowledgeState, addAnnotation, listCaptures, createResearch, toggleInterest, runBeat, enqueueIngest, closeWriteDb } from './write.mjs'
 import { spawn } from 'node:child_process'
-import pathMod from 'node:path'
+import { ROOT as REPO_ROOT, WEB_HOST, WEB_PORT, WEB_TOKEN, env } from '../shared/config.mjs'
 import { headerHtml, streamMain, storyMain, entityMain, memoryMain, briefMain, stanceMain, searchMain, claimsMain, auditMain, topicsMain, topicMain, errorMain } from './views/templates.mjs'
 import { esc } from './views/fmt.mjs'
+import { hostnameOf, tokenEquals, cookieValue, writeRequestError } from './security.mjs'
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 const PUBLIC_DIR = path.join(HERE, 'public')
-const HOST = process.env.HOST || '0.0.0.0'
-const PORT = Number(process.env.PORT || 3083)
+const VIEWS_DIR = path.join(HERE, 'views')
+const HOST = WEB_HOST
+const PORT = WEB_PORT
 const SUMMARY_PREFIX = path.resolve(SUMMARY_ROOT) + path.sep
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+const WORKER_SCRIPT = path.join(REPO_ROOT, 'src', 'cli', 'worker.mjs')
+// 浏览器端与服务端共用的纯函数模板：public/app.js 以 ES module 方式 import
+const VIEW_MODULES = { '/templates.mjs': 'templates.mjs', '/fmt.mjs': 'fmt.mjs' }
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -43,12 +52,71 @@ const MIME = {
 }
 
 // ── 基础工具 ────────────────────────────────────────────────────────────
+// CSP：只允许本站脚本与样式；图片允许 data:（无外链）。内联 JSON 引导数据是 type=application/json，不受影响。
+const CSP = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
+
 function baseHeaders(extra = {}) {
   return {
     'x-content-type-options': 'nosniff',
     'referrer-policy': 'no-referrer',
+    'x-frame-options': 'DENY',
+    'content-security-policy': CSP,
     ...extra
   }
+}
+
+// ── 访问控制 ────────────────────────────────────────────────────────────
+function lanAddresses() {
+  const out = []
+  for (const list of Object.values(os.networkInterfaces())) {
+    for (const item of list || []) {
+      if (!item.internal) out.push(item.address)
+    }
+  }
+  return out
+}
+
+/** 允许出现在 Host 头里的主机名（挡 DNS rebinding）。WINNOW_ALLOWED_HOSTS 可追加，逗号分隔。 */
+function buildAllowedHosts() {
+  const set = new Set(['localhost', '127.0.0.1', '::1'])
+  if (HOST && HOST !== '0.0.0.0' && HOST !== '::') set.add(HOST.toLowerCase())
+  else for (const ip of lanAddresses()) set.add(ip.toLowerCase())
+  for (const h of String(env('WINNOW_ALLOWED_HOSTS', '')).split(',')) if (h.trim()) set.add(h.trim().toLowerCase())
+  return set
+}
+const ALLOWED_HOSTS = buildAllowedHosts()
+
+/**
+ * 每个请求的准入检查；不通过时直接写响应并返回 false。
+ * 令牌模式下，GET 带 ?token= 会种 cookie 并重定向到去掉令牌的地址（令牌不留在地址栏/历史里）。
+ */
+function checkAccess(req, res, url) {
+  if (!WEB_TOKEN && !ALLOWED_HOSTS.has(hostnameOf(req.headers.host))) {
+    sendText(res, 403, 'host not allowed (set WINNOW_ALLOWED_HOSTS or WINNOW_WEB_TOKEN)')
+    return false
+  }
+  if (!WEB_TOKEN) return true
+  const bearer = /^Bearer\s+(.+)$/i.exec(String(req.headers.authorization || ''))?.[1]
+  if (tokenEquals(bearer, WEB_TOKEN) || tokenEquals(cookieValue(req.headers.cookie, 'winnow_token'), WEB_TOKEN)) return true
+  const qToken = url.searchParams.get('token')
+  if ((req.method === 'GET' || req.method === 'HEAD') && tokenEquals(qToken, WEB_TOKEN)) {
+    url.searchParams.delete('token')
+    res.writeHead(303, baseHeaders({
+      location: url.pathname + (url.search || ''),
+      'set-cookie': `winnow_token=${encodeURIComponent(WEB_TOKEN)}; HttpOnly; SameSite=Strict; Path=/; Max-Age=31536000`
+    }))
+    res.end()
+    return false
+  }
+  sendText(res, 401, 'unauthorized')
+  return false
+}
+
+/** 写接口的跨站防护：必须是 JSON，且（浏览器发起时）必须同源。规则见 security.mjs。 */
+function checkWriteRequest(req, res) {
+  const err = writeRequestError(req.headers)
+  if (err) { sendJson(res, err.status, { error: err.error }); return false }
+  return true
 }
 
 function sendHtml(res, status, html, extra = {}) {
@@ -137,9 +205,11 @@ async function serveStatic(pathname, req, res) {
   const ext = path.extname(pathname).toLowerCase()
   const mime = MIME[ext]
   if (!mime) return false
-  const filePath = path.join(PUBLIC_DIR, pathname.slice(1))
-  // 双保险：解析后必须仍在 public 目录内
-  if (!filePath.startsWith(PUBLIC_DIR + path.sep)) return false
+  const viewModule = VIEW_MODULES[pathname]
+  const baseDir = viewModule ? VIEWS_DIR : PUBLIC_DIR
+  const filePath = path.join(baseDir, viewModule || pathname.slice(1))
+  // 双保险：解析后必须仍在对应目录内
+  if (!filePath.startsWith(baseDir + path.sep)) return false
   let info
   try {
     info = await stat(filePath)
@@ -291,7 +361,14 @@ async function readBody (req, limit = 64 * 1024) {
     req.on('error', reject)
   })
 }
+let workerChild = null
+
 async function handleWrite (req, res, pathname) {
+  if (!pathname.startsWith('/api/')) {
+    sendJson(res, 405, { error: 'method not allowed' }, { allow: 'GET, HEAD' })
+    return
+  }
+  if (!checkWriteRequest(req, res)) return
   try {
     const body = await readBody(req)
     if (pathname === '/api/capture') {
@@ -314,13 +391,21 @@ async function handleWrite (req, res, pathname) {
       return
     }
     if (pathname === '/api/ingest-run') {
-      const child = spawn(process.execPath, [pathMod.join(ROOT, 'worker_ingest.mjs')], { cwd: ROOT, detached: true, stdio: 'ignore' })
+      // 同一时间只跑一个 worker；队列领取本身也是原子的，这里只是避免空转多开
+      if (workerChild && workerChild.exitCode === null) {
+        sendJson(res, 202, { ok: true, started: false, running: true, pid: workerChild.pid })
+        return
+      }
+      const child = spawn(process.execPath, [WORKER_SCRIPT], { cwd: REPO_ROOT, detached: true, stdio: 'ignore' })
+      child.on('error', (err) => console.error('[ingest-run] spawn failed', err))
       child.unref()
+      workerChild = child
       sendJson(res, 202, { ok: true, started: true, pid: child.pid })
       return
     }
     if (pathname === '/api/ingest') {
-      const urls = Array.isArray(body.urls) ? body.urls : [body.url].filter(Boolean)
+      const urls = (Array.isArray(body.urls) ? body.urls : [body.url]).filter(u => typeof u === 'string' && u).slice(0, 20)
+      if (!urls.length) throw new Error('url required')
       const queued = urls.map(u => enqueueIngest(u))
       sendJson(res, 200, { ok: true, queued })
       return
@@ -336,7 +421,8 @@ async function handleWrite (req, res, pathname) {
       return
     }
     if (pathname === '/api/captures') {
-      sendJson(res, 200, { captures: listCaptures({ status: body.status || null, limit: Number(body.limit || 20) }) })
+      const limit = Math.min(200, Math.max(1, Number.parseInt(body.limit, 10) || 20))
+      sendJson(res, 200, { captures: listCaptures({ status: typeof body.status === 'string' ? body.status : null, limit }) })
       return
     }
     sendJson(res, 404, { error: 'unknown write endpoint' })
@@ -435,6 +521,7 @@ async function route(req, res) {
   const pathname = url.pathname
 
   try {
+    if (!checkAccess(req, res, url)) return
     if (req.method === 'POST') {
       await handleWrite(req, res, pathname)
       return
@@ -604,26 +691,19 @@ server.on('clientError', (err, socket) => {
 process.on('uncaughtException', (err) => console.error('[uncaughtException]', err))
 process.on('unhandledRejection', (err) => console.error('[unhandledRejection]', err))
 
-function lanAddresses() {
-  const out = []
-  for (const list of Object.values(os.networkInterfaces())) {
-    for (const item of list || []) {
-      if (item.family === 'IPv4' && !item.internal) out.push(item.address)
-    }
-  }
-  return out
-}
-
 server.listen(PORT, HOST, () => {
-  const addrs = lanAddresses()
+  const port = server.address().port
   const stats = safeStats()
-  console.log('Winnow · 只读浏览服务')
-  console.log(`  监听：${HOST}:${PORT}`)
-  for (const ip of addrs.length ? addrs : ['127.0.0.1']) {
-    console.log(`  http://${ip}:${PORT}/`)
+  const exposed = HOST === '0.0.0.0' || HOST === '::'
+  console.log('Winnow · Web 服务')
+  console.log(`  监听：${HOST}:${port}`)
+  if (exposed) {
+    for (const ip of lanAddresses().filter(a => a.includes('.'))) console.log(`  http://${ip}:${port}/`)
   }
-  console.log(`  本地：http://127.0.0.1:${PORT}/`)
-  console.log(`  数据库：${process.env.P0_DB || DB_PATH}（只读）`)
+  console.log(`  本地：http://127.0.0.1:${port}/`)
+  if (exposed && !WEB_TOKEN) console.warn('  ⚠ 已暴露到局域网但未设置 WINNOW_WEB_TOKEN：同网段任何人都能读写。')
+  if (WEB_TOKEN) console.log('  访问令牌：已启用（首次访问加 ?token=…，之后由 cookie 保持）')
+  console.log(`  数据库：${DB_PATH}（浏览只读；写接口见 write.mjs）`)
   console.log(`  数据量：${stats.items} 条目 / ${stats.stories} 事件 / ${stats.claims} claim / ${stats.entities} 实体`)
 })
 
@@ -638,12 +718,10 @@ server.on('error', (err) => {
 function shutdown(signal) {
   console.log(`\n收到 ${signal}，正在关闭…`)
   server.close(() => {
-    try {
-      // 只读连接，关闭即可
-      import('./queries.mjs').then((m) => m.closeDb?.()).catch(() => {})
-    } finally {
-      process.exit(0)
-    }
+    // 先关库（写连接需要 checkpoint WAL），再退出
+    try { closeDb() } catch (err) { console.error('[shutdown] closeDb', err) }
+    try { closeWriteDb() } catch (err) { console.error('[shutdown] closeWriteDb', err) }
+    process.exit(0)
   })
   setTimeout(() => process.exit(0), 3000).unref()
 }

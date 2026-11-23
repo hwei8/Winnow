@@ -17,7 +17,7 @@ npm run pipeline -- --search --hot=3              # 搜索发现 + 热榜补充
 `cli/pipeline.mjs` 依次调用：
 
 ```
-ingest/pipeline.mjs → ingest/finalize.mjs → story/apply-policy.mjs → story/apply-consolidate.mjs → story/qa.mjs
+cli/ingest.mjs → cli/finalize.mjs → cli/apply-policy.mjs → cli/apply-consolidate.mjs → cli/qa.mjs
 ```
 
 任何一步失败不会中断后续步骤；结束时写 `out/reports/daily-YYYY-MM-DD.md` 与一行 `pipeline_run`。
@@ -111,11 +111,11 @@ ingest/pipeline.mjs → ingest/finalize.mjs → story/apply-policy.mjs → story
 针对「越追加越乱」的 Story：把多个「最新进展」小节合成一节。
 
 参数：`minSections=2, maxMerge=8, lenRatio=0.2（合并后长度不低于原 20%）, absMinLen=50, coverageTh=0.95, dupTh=0.15, retries=2`。
-合并后自动跑 `knowledge/realign.mjs` 重对齐锚点。
+合并后自动跑 `knowledge/align.mjs` 的 `realignAnchors()` 重对齐锚点（批量版：`cli/realign.mjs`）。
 
 ## 6. QA
 
-`story/qa.mjs` 打分（0–100）：
+`cli/qa.mjs` 打分（0–100）：
 
 | 维度 | 权重 | 说明 |
 |---|---|---|
@@ -133,7 +133,7 @@ ingest/pipeline.mjs → ingest/finalize.mjs → story/apply-policy.mjs → story
 ## 7. 回归与观察
 
 ```bash
-node src/domains/story/regression.mjs     # 用真实 update 回放当前策略（只判定不执行）
+node src/cli/policy-regression.mjs        # 用真实 update 回放当前策略（只判定不执行）
 node src/cli/link-audit.mjs               # Story 间事实重叠 / 过短 Story / 可合并对
 npm run metrics                           # 追平率 / 冗余率 / QA 均分 / 简报选择率
 ```

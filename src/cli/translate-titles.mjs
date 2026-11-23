@@ -25,7 +25,7 @@ for (const batch of tasks) {
     if (p && Array.isArray(p.titles) && p.titles.length === batch.length) arr = p.titles
   }
   if (!arr) { console.error('batch failed', batch[0].title.slice(0, 30)); continue }
-  db.exec('BEGIN')
+  db.exec('BEGIN IMMEDIATE')
   try {
     batch.forEach((row, k) => {
       let t = String(arr[k] || '').trim().replace(/^["“]|["”]$/g, '')

@@ -1,22 +1,23 @@
 // cli/discover.mjs — 搜索型发现：按 config/search_queries.txt 跑 DeepSeek 搜索，过滤后入队
 //
 // 用法：
-//   node search_discover.mjs                    # 只发现，打印候选
-//   node search_discover.mjs --enqueue          # 入 ingest_queue（worker_ingest 消费）
-//   node search_discover.mjs --query "..." --count 10
-//   node search_discover.mjs --topic 英伟达与AI芯片 --days 3
+//   node src/cli/discover.mjs                    # 只发现，打印候选
+//   node src/cli/discover.mjs --enqueue         # 入 ingest_queue（cli/worker.mjs 消费）
+//   node src/cli/discover.mjs --query "..." --count 10
+//   node src/cli/discover.mjs --topic 英伟达与AI芯片 --days 3
 import { readFileSync, mkdirSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { openDb, nowIso } from '../shared/db.mjs'
 import { search } from '../providers/search.mjs'
-import { enqueue } from '../domains/ingest/queue.mjs'
+import { tryEnqueue } from '../domains/ingest/queue.mjs'
+import { outPath, CONFIG_DIR } from '../shared/config.mjs'
 
-const HERE = path.dirname(new URL(import.meta.url).pathname)
+const HERE = import.meta.dirname
 const argv = process.argv.slice(2)
 const arg = (k, d = null) => { const i = argv.indexOf('--' + k); return i >= 0 ? (argv[i + 1] ?? true) : d }
 const flag = k => argv.includes('--' + k)
 
-const CONFIG = arg('config', path.join(HERE, 'config/search_queries.txt'))
+const CONFIG = arg('config', path.join(CONFIG_DIR, 'search_queries.txt'))
 const DEFAULTS = {
   count: Number(arg('count', 10)),
   maxItems: Number(arg('max', 6)),
@@ -115,13 +116,13 @@ if (oneQuery) {
   }
 }
 
-const dir = path.join(HERE, 'out/search'); mkdirSync(dir, { recursive: true })
+const dir = outPath('search'); mkdirSync(dir, { recursive: true })
 const file = path.join(dir, `search-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, '')}.json`)
 writeFileSync(file, JSON.stringify({ at: nowIso(), config: CONFIG, topics: out }, null, 2))
 
 if (flag('json')) {
   const urls = out.flatMap(t => t.results.map(x => x.url))
-  if (flag('enqueue')) for (const u of urls) enqueue(db, u, 'search')
+  if (flag('enqueue')) for (const u of urls) tryEnqueue(db, u, 'search')
   console.log(JSON.stringify({ tool: 'search_discover', urls, topics: out.map(t => ({ name: t.topic, n: t.results.length })), file: path.relative(HERE, file) }))
   db.close()
   process.exit(0)
@@ -134,7 +135,7 @@ for (const t of out) {
     total++
     console.log(`- [${x.authority ?? '-'}|${x.score?.toFixed(2) ?? '-'}] ${x.title.slice(0, 70)}  ${x.site}  ${x.publishedAt?.slice(0, 10) ?? ''}`)
     console.log(`    ${x.url}`)
-    if (flag('enqueue')) enqueue(db, x.url, 'search')
+    if (flag('enqueue')) tryEnqueue(db, x.url, 'search')
   }
 }
 console.log(`\n候选 ${total} 条；${flag('enqueue') ? '已入队' : '未入队（加 --enqueue 入库）'}；明细 ${path.relative(HERE, file)}`)

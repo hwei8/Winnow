@@ -141,5 +141,5 @@ source ─┬─ item ─┬─ item_block            （原文分块，证据�
 
 ## 迁移
 
-历史迁移脚本存档于 [`scripts/migrations/`](../scripts/migrations/)，仅供考古。
+历史迁移脚本已从仓库移除（见 git 历史）。存量数据的幂等修复用 `npm run db:repair`。
 新的 schema 变更方式：改 `src/shared/schema.mjs` → 提升 `SCHEMA_VERSION` → 在 `docs/adr/` 写一条决策 → 用一次性脚本对线上库做 `ALTER TABLE`（脚本不入库）。

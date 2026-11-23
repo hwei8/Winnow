@@ -1,19 +1,13 @@
 // providers/jev.mjs — Jev 决策模型客户端（OpenCode Zen 免费优先，OpenRouter 兜底）
 // 主通道：OpenCode Zen System One（jev-1.13-free，免费、~200ms、实测 24 并发无 429）
 // 兜底：OpenRouter Decisions API（~typesafe/jev-latest = 1.14，$0.042/1M 输入）
-import { readFileSync } from 'node:fs'
-import path from 'node:path'
-import { ROOT } from '../shared/db.mjs'
+import { readSecret } from '../shared/config.mjs'
 
 const ZEN_URL = process.env.JEV_ZEN_URL || 'https://opencode.ai/zen/v1/systemone'
 const OR_URL = process.env.JEV_OR_URL || 'https://openrouter.ai/api/alpha/decisions'
 
-function readKey (envName, file) {
-  if (process.env[envName]) return process.env[envName].trim()
-  try { return readFileSync(path.join(ROOT, file), 'utf8').trim() } catch { return null }
-}
-const ZEN_KEY = readKey('ZEN_API_KEY', '.secrets/zen.key')
-const OR_KEY = readKey('OPENROUTER_API_KEY', '.secrets/openrouter.key')
+const ZEN_KEY = readSecret('ZEN_API_KEY', 'zen.key')
+const OR_KEY = readSecret('OPENROUTER_API_KEY', 'openrouter.key')
 const PROVIDER = process.env.JEV_PROVIDER || (ZEN_KEY ? 'zen' : (OR_KEY ? 'openrouter' : 'zen'))
 const FALLBACK = process.env.JEV_FALLBACK !== '0'
 

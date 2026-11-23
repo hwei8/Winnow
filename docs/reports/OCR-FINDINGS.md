@@ -67,7 +67,7 @@
 ## 6. 复现
 
 ```bash
-cd /workspace/IM-Base/memory-p0
+cd <old-repo>/memory-p0
 CONCURRENCY=5 PER_ITEM=6 PER_GROUP=7 node ocr_sample.mjs   # 采样 + OCR（约 2 分钟）
 node ocr_analyze.mjs                                        # 滑动窗口对齐分析
 ```

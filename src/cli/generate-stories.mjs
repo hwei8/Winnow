@@ -4,6 +4,8 @@ import path from 'node:path'
 import { openDb, ROOT, nowIso } from '../shared/db.mjs'
 import { chat, extractJson } from '../providers/llm.mjs'
 import { decide } from '../providers/jev.mjs'
+import { sectionId, upsertStory } from '../domains/story/store.mjs'
+import { outFile } from '../shared/config.mjs'
 
 const db = openDb()
 const LIMIT = Number(process.env.LIMIT || 0)
@@ -14,17 +16,17 @@ const stories = db.prepare(`
   SELECT s.id, s.title,
     (SELECT COUNT(*) FROM story_item si JOIN claim c ON c.item_id=si.item_id WHERE si.story_id=s.id) claims
   FROM story s
-  WHERE s.item_count > 0 AND (s.body_md IS NULL OR s.body_md='')
+  WHERE s.item_count > 0 AND (s.body_md IS NULL OR s.body_md='') AND COALESCE(s.status,'') != 'duplicate'
     AND s.id NOT LIKE 'story:gen:%' AND s.id NOT LIKE 'story:pilot:%'
   ORDER BY claims DESC`).all()
 const queue = LIMIT ? stories.slice(0, LIMIT) : stories
 console.log('stories to generate:', queue.length)
-const log = (o) => appendFileSync(path.join(ROOT, 'out', 'batch-fast.log'), JSON.stringify(o) + '\n')
+const log = (o) => appendFileSync(outFile('batch-fast.log'), JSON.stringify(o) + '\n')
 
 async function generate (story) {
   const items = db.prepare('SELECT item_id FROM story_item WHERE story_id=?').all(story.id).map(r => r.item_id)
   if (!items.length) return { skipped: 'no-items' }
-  const claims = db.prepare(`SELECT c.fact_id FROM claim c WHERE c.item_id IN (${items.map(() => '?').join(',')}) AND c.status!='meta' AND c.fact_id IS NOT NULL`).all(...items)
+  const claims = db.prepare(`SELECT c.fact_id FROM claim c WHERE c.item_id IN (${items.map(() => '?').join(',')}) AND COALESCE(c.status,'')!='meta' AND c.fact_id IS NOT NULL`).all(...items)
   const factIds = [...new Set(claims.map(c => c.fact_id))]
   if (factIds.length < 5) return { skipped: 'too-few-facts', facts: factIds.length }
   const factRows = db.prepare(`SELECT id,canonical_text FROM fact WHERE id IN (${factIds.map(() => '?').join(',')})`).all(...factIds)
@@ -66,8 +68,8 @@ ${factList}
     const segs = (sec.segments || []).map(s => {
       let text = String(s.text || '')
       const leak = new Set((s.facts || []).filter(id => validIds.has(id)))
-      text = text.replace(/[（(]\s*(F\d{5}(?:\s*[、,，]\s*F\d{5})*)\s*[）)]/g, (m, ids) => { ids.split(/[、,，]/).forEach(id => { const q = id.trim(); if (validIds.has(q)) leak.add(q) }); return '' })
-      text = text.replace(/\bF\d{5}\b/g, (m) => { if (validIds.has(m)) leak.add(m); return '' })
+      text = text.replace(/[（(]\s*(F\d{5,}(?:\s*[、,，]\s*F\d{5,})*)\s*[）)]/g, (m, ids) => { ids.split(/[、,，]/).forEach(id => { const q = id.trim(); if (validIds.has(q)) leak.add(q) }); return '' })
+      text = text.replace(/\bF\d{5,}\b/g, (m) => { if (validIds.has(m)) leak.add(m); return '' })
       return { text: text.replace(/\s{2,}/g, ' ').trim(), facts: [...leak] }
     }).filter(s => s.text.length > 8)
     if (!segs.length) continue
@@ -80,11 +82,11 @@ ${factList}
         const segStart = body.length
         body += seg.text
         const segEnd = body.length
-        for (const fid of [...new Set(seg.facts)]) storyFacts.push({ story_id: story.id, fact_id: fid, section_id: `sec${sections.length + 1}`, char_start: segStart, char_end: segEnd, order_idx: order++ })
+        for (const fid of [...new Set(seg.facts)]) storyFacts.push({ story_id: story.id, fact_id: fid, section_id: sectionId(story.id, sections.length + 1), char_start: segStart, char_end: segEnd, order_idx: order++ })
       }
       body += '\n\n'
     }
-    sections.push({ id: `sec${sections.length + 1}`, heading: sec.heading, body_md: body.slice(secStart, body.length).replace(/^## .*\n\n/, '').trim(), char_start: secStart, char_end: body.length })
+    sections.push({ id: sectionId(story.id, sections.length + 1), heading: sec.heading, body_md: body.slice(secStart, body.length).replace(/^## .*\n\n/, '').trim(), char_start: secStart, char_end: body.length })
   }
   if (body.length < 400 || !sections.length) return { error: 'empty-body' }
 
@@ -95,14 +97,13 @@ ${factList}
   } catch {}
 
   const ts = db.prepare(`SELECT MIN(published_ts) a, MAX(published_ts) b FROM item WHERE id IN (${items.map(() => '?').join(',')})`).get(...items)
-  db.exec('BEGIN')
+  db.exec('BEGIN IMMEDIATE')
   try {
-    db.prepare(`INSERT OR REPLACE INTO story(id,title,status,item_count,first_seen_ts,last_update_ts,anchor,validated,category,category_confidence,body_md) VALUES (?,?,?,?,?,?,?,?,?,?,?)`)
-      .run(story.id, story.title, 'active', items.length, ts.a, ts.b, null, 1, category, conf, body)
+    upsertStory(db, { id: story.id, title: story.title, status: 'active', item_count: items.length, first_seen_ts: ts.a, last_update_ts: ts.b, anchor: null, validated: 1, category, category_confidence: conf, body_md: body })
     db.prepare('DELETE FROM story_section WHERE story_id=?').run(story.id)
     db.prepare('DELETE FROM story_fact WHERE story_id=?').run(story.id)
     const insSec = db.prepare('INSERT INTO story_section(id,story_id,order_idx,heading,body_md,char_start,char_end) VALUES (?,?,?,?,?,?,?)')
-    sections.forEach((s, i) => insSec.run(`${story.id}:sec${i + 1}`, story.id, i, s.heading, s.body_md, s.char_start, s.char_end))
+    sections.forEach((s, i) => insSec.run(s.id, story.id, i, s.heading, s.body_md, s.char_start, s.char_end))
     const insSf = db.prepare('INSERT INTO story_fact(story_id,fact_id,section_id,char_start,char_end,role,order_idx) VALUES (?,?,?,?,?,?,?)')
     for (const s of storyFacts) insSf.run(s.story_id, s.fact_id, s.section_id, s.char_start, s.char_end, 'asserts', s.order_idx)
     db.exec('COMMIT')
@@ -140,6 +141,6 @@ const summary = {
   seconds: Math.round((Date.now() - t0) / 1000),
   failures: results.filter(r => r.error || r.skipped).slice(0, 10)
 }
-writeFileSync(path.join(ROOT, 'out', 'batch-fast.json'), JSON.stringify({ summary, results }, null, 1))
+writeFileSync(outFile('batch-fast.json'), JSON.stringify({ summary, results }, null, 1))
 console.log(JSON.stringify(summary, null, 1))
 db.close()

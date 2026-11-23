@@ -1,27 +1,36 @@
 // cli/im-capture.mjs — 用 Telegram 直接记一条想法（P0 尾巴）
 //
-//   node im_capture.mjs --once          # 拉一次新消息
-//   node im_capture.mjs --loop          # 每 15s 轮询（后台运行）
-//   node im_capture.mjs --test "记 明天确认 bge-m3 本地延迟"   # 本地模拟（不调 Telegram）
+//   node src/cli/im-capture.mjs --once          # 拉一次新消息
+//   node src/cli/im-capture.mjs --loop          # 每 15s 轮询（后台运行）
+//   node src/cli/im-capture.mjs --test "记 明天确认 bge-m3 本地延迟"   # 本地模拟（不调 Telegram）
 //
 // 规则：以「记」「记：」「capture 」开头 → 去前缀后存为 capture；其余消息忽略。
 // 注意：DSH 自己的 Telegram 集成也在轮询 getUpdates，两个消费者会抢更新。
 //       如遇 409 Conflict，请停用 DSH 集成或用独立 bot token。
-import { readFileSync, writeFileSync, existsSync } from 'node:fs'
+import { readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import path from 'node:path'
-import { openDb, ROOT } from '../shared/db.mjs'
+import { openDb } from '../shared/db.mjs'
+import { dataPath, secretPath } from '../shared/config.mjs'
 import { createCapture } from '../domains/memory/state.mjs'
-import { sendMessage } from '../providers/telegram.mjs'
+import { sendMessage, telegramConfig } from '../providers/telegram.mjs'
 
-const CFG = JSON.parse(readFileSync(path.join(ROOT, '.secrets', 'telegram.json'), 'utf8'))
-const STATE_FILE = path.join(ROOT, '.secrets', 'telegram-offset.json')
+const CFG = telegramConfig() // env（TELEGRAM_BOT_TOKEN/CHAT_ID）或 .secrets/telegram.json
+// 轮询偏移量是运行时状态，不是密钥：放 data/；兼容读取旧位置 .secrets/telegram-offset.json
+const STATE_FILE = dataPath('telegram-offset.json')
+const LEGACY_STATE_FILE = secretPath('telegram-offset.json')
 const PREFIXES = [/^记[:：\s]+/, /^记忆[:：\s]+/, /^capture\s+/i, /^c\s+/i]
 const CHAT_ALLOW = new Set([String(CFG.chat_id)])
 
 function loadState () {
-  try { return JSON.parse(readFileSync(STATE_FILE, 'utf8')) } catch { return { offset: 0 } }
+  for (const f of [STATE_FILE, LEGACY_STATE_FILE]) {
+    try { return JSON.parse(readFileSync(f, 'utf8')) } catch { /* 试下一个 */ }
+  }
+  return { offset: 0 }
 }
-function saveState (s) { writeFileSync(STATE_FILE, JSON.stringify(s, null, 1)); }
+function saveState (s) {
+  mkdirSync(path.dirname(STATE_FILE), { recursive: true })
+  writeFileSync(STATE_FILE, JSON.stringify(s, null, 1))
+}
 
 function parseCapture (text) {
   const raw = String(text || '').trim()
@@ -62,9 +71,11 @@ async function pollOnce () {
     const msg = u.message
     if (!msg || msg.from?.is_bot) continue
     const r = handleMessage(msg, db)
+    saveState(state) // 先落偏移再回执：回执失败或进程崩溃都不会重复记录
     if (r.captured) {
       n++
-      await sendMessage(`✅ 已记录：${r.content.slice(0, 80)}`, { chatId: String(msg.chat.id) }).catch(() => {})
+      await sendMessage(`✅ 已记录：${r.content.slice(0, 80)}`, { chatId: String(msg.chat.id) })
+        .catch(e => console.error('[im_capture] ack failed:', String(e.message).slice(0, 120)))
     }
   }
   saveState(state)

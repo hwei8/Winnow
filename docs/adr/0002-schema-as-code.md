@@ -1,7 +1,7 @@
 # ADR 0002 — Schema 作为代码，迁移脚本只作存档
 
 - 状态：已采纳
-- 相关：`src/shared/schema.mjs`、`scripts/migrations/`、docs/data-model.md
+- 相关：`src/shared/schema.mjs`、`src/cli/db.mjs --repair`、docs/data-model.md
 
 ## 背景
 
@@ -11,7 +11,8 @@ schema 经历了 16 个版本的增量迁移（`07_migrate` … `100_schema_p4`�
 
 1. 把线上库的最终形态导出成一份**幂等**的建库 SQL（全部 `CREATE ... IF NOT EXISTS`），放进 `src/shared/schema.mjs`；
 2. `SCHEMA_VERSION` 与 `PRAGMA user_version` 对齐；
-3. 历史迁移脚本移到 `scripts/migrations/`，标注"只读存档，不再执行"；
+3. 历史迁移脚本不再保留在仓库里（需要时查 git 历史）；可重复执行的数据修复集中在 `db.mjs --repair`；
+4. 运行时代码不得 `CREATE TABLE` / `ALTER TABLE`（`npm run check` 之外由代码评审把关）；
 4. 未来的 schema 变更 = 改代码 + 提升版本号 + 写一次性迁移脚本（不入库）+ 补一条 ADR。
 
 ## 后果

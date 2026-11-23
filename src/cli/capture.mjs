@@ -1,11 +1,11 @@
 // cli/capture.mjs — 私人记忆捕获与知识状态（CLI）
 //
 // 用法：
-//   node capture.mjs "想法内容" --kind=idea --intent="为什么存" --review=2026-12-01
-//   node capture.mjs --list [--status=inbox] [--limit=20]
-//   node capture.mjs --due                     # 到复核期的记忆
-//   node capture.mjs --seen story:story:rss:... # 标记看过（推进水位）
-//   node capture.mjs --known story:...          # 标记已知
+//   node src/cli/capture.mjs "想法内容" --kind=idea --intent="为什么存" --review=2026-12-01
+//   node src/cli/capture.mjs --list [--status=inbox] [--limit=20]
+//   node src/cli/capture.mjs --due                     # 到复核期的记忆
+//   node src/cli/capture.mjs --seen story:story:rss:... # 标记看过（推进水位）
+//   node src/cli/capture.mjs --known story:...          # 标记已知
 import { openDb } from '../shared/db.mjs'
 import { createCapture, listCaptures, dueCaptures, setState, pendingUpdates } from '../domains/memory/state.mjs'
 

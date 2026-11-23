@@ -84,7 +84,7 @@ node daemon.mjs --once --steps=metrics   # 调度脚本可用
 node export.mjs                    # out/export/<date>/ 全量导出
 ```
 
-Web（`http://192.168.0.188:3083`）：9 个页面全部 200。
+Web（`http://<lan-host>:3083`）：9 个页面全部 200。
 
 ## 5. 明确缺口（不在"完成"口径内）
 

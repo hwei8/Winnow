@@ -1,6 +1,6 @@
 # 机器迁移检查（2026-11-22）
 
-新机器：`/home/he/IM-Base`（旧：`/workspace/IM-Base`），Node v24.14，Web `192.168.0.222:3083`。
+新机器：`<repo>`（旧：`<old-repo>`），Node v24.14，Web `<lan-host>:3083`。
 
 ## 已修复
 
@@ -29,8 +29,8 @@
 ## 遗留问题（已确认处理）
 
 1. **`Summary/` 不再迁移**：它是测试用初始语料；`frame` 表旧路径只影响 `/api/frame` 截图，正文/claim/Story 不受影响，后续重建库时清掉。
-2. **Embedding 走本地 8033（192.168.0.188 已恢复）**：`lib/embed.mjs` 默认 `EMBED_PROVIDER=local`，失败回退 OpenRouter `baai/bge-m3`（向量 cos 0.99994，可无缝互换）。见 DECISIONS D54。
-3. Web 地址：`http://192.168.0.222:3083`。
+2. **Embedding 走本地 8033（<lan-host> 已恢复）**：`lib/embed.mjs` 默认 `EMBED_PROVIDER=local`，失败回退 OpenRouter `baai/bge-m3`（向量 cos 0.99994，可无缝互换）。见 DECISIONS D54。
+3. Web 地址：`http://<lan-host>:3083`。
 4. `im_capture.mjs` 与 DSH Telegram 轮询的 409 冲突提醒仍有效。
 
 ## 数据完整性

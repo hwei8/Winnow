@@ -1,5 +1,5 @@
 // cli/feed-score.mjs — 候选 RSS 源评分：正文可得性 / 更新量 / 与库内重复率
-// 用法：node feed_score.mjs [--per-feed=10] [--probe-fetch=2] [--only=关键字] [--json]
+// 用法：node src/cli/feed-score.mjs [--per-feed=10] [--probe-fetch=2] [--only=关键字] [--json]
 // 输出：out/feed-score-<时间>.md + JSON，并在 stdout 打印评分表
 import fs from 'node:fs'
 import path from 'node:path'
@@ -7,6 +7,7 @@ import { parseFeed, htmlToBlocks, blockText } from '../domains/ingest/feed.mjs'
 import { fetchPage } from '../domains/ingest/page.mjs'
 import { openDb } from '../shared/db.mjs'
 import { embedTexts } from '../domains/knowledge/facts.mjs'
+import { outFile } from '../shared/config.mjs'
 
 const ROOT = path.dirname(new URL(import.meta.url).pathname)
 const arg = (k, d) => {
@@ -178,7 +179,7 @@ async function scoreFeed (cand, known) {
 }
 
 function loadStoryVecs () {
-  const p = path.join(ROOT, 'out/story-vectors.json')
+  const p = outFile('story-vectors.json')
   if (!fs.existsSync(p)) return []
   const j = JSON.parse(fs.readFileSync(p))
   return Object.values(j).filter(Array.isArray).map(v => ({ v: Float32Array.from(v) }))
@@ -205,8 +206,7 @@ async function main () {
   }
   rows.sort((a, b) => b.score - a.score)
   const stamp = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 12)
-  fs.mkdirSync(path.join(ROOT, 'out'), { recursive: true })
-  fs.writeFileSync(path.join(ROOT, `out/feed-score-${stamp}.json`), JSON.stringify(rows, null, 2))
+    fs.writeFileSync(outFile(`feed-score-${stamp}.json`), JSON.stringify(rows, null, 2))
   const md = []
   md.push(`# RSS 源评分（${new Date().toISOString().slice(0, 16).replace('T', ' ')}）\n`)
   md.push(`口径：每源取最新 ${PER_FEED} 条；\`字数\`=feed 自带正文字数；\`抓取\`=feed 不足 800 字时抓页成功率；\`重复\`=标题与库内 item/story 相似度≥0.6 的比例；\`日供\`=每日可用条数（已扣重复与深度）；\`估 claim\`=按 600 字/条折算。\n`)
@@ -218,7 +218,7 @@ async function main () {
   }
   const sum = rows.filter(r => r.ok).reduce((s, r) => s + r.perDayGood, 0)
   md.push(`\n合计日供（全部可订源）：**${sum.toFixed(1)} 条/天**；按 0.59 Story/item 折算 ≈ **${(sum * 0.59).toFixed(0)} 篇 Story/天**。`)
-  const file = path.join(ROOT, `out/feed-score-${stamp}.md`)
+  const file = outFile(`feed-score-${stamp}.md`)
   fs.writeFileSync(file, md.join('\n'))
   console.log(md.join('\n'))
   console.log('\n写入：' + file)

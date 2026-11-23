@@ -1,7 +1,7 @@
 // 数据库 schema（唯一权威定义）。
 //
 // 由 v16 线上库导出：新库执行 applySchema() 即可得到与生产一致的形态；
-// 历史增量迁移脚本不再参与建库（见 docs/adr/0016-schema-as-code.md）。
+// 历史增量迁移脚本不再参与建库（见 docs/adr/0002-schema-as-code.md）。
 
 export const SCHEMA_VERSION = 16
 export const SCHEMA_SQL = `

@@ -1,10 +1,10 @@
-// story/apply-policy.mjs — 对待处理的 Update 做重写分级并执行
-import { openDb, nowIso } from '../../shared/db.mjs'
-import { classifyUpdate } from './policy.mjs'
-import { rewriteStory } from './rewrite.mjs'
-import { rewriteTargeted } from './rewrite-targeted.mjs'
-import { consolidateSections } from './consolidate.mjs'
-import { rewriteSmallStory } from './rewrite-small.mjs'
+// cli/apply-policy.mjs — 对待处理的 Update 做重写分级并执行
+import { openDb, nowIso } from '../shared/db.mjs'
+import { classifyUpdate } from '../domains/story/policy.mjs'
+import { rewriteStory } from '../domains/story/rewrite.mjs'
+import { rewriteTargeted } from '../domains/story/rewrite-targeted.mjs'
+import { consolidateSections } from '../domains/story/consolidate.mjs'
+import { rewriteSmallStory } from '../domains/story/rewrite-small.mjs'
 
 const db = openDb()
 const ONLY = process.env.STORY_ID || null
@@ -30,6 +30,11 @@ for (const g of groups.values()) {
   const factIds = [...g.facts]
   if (!factIds.length) { for (const rr of g.rows) db.prepare('UPDATE story_update SET severity=?,action=?,reason=? WHERE id=?').run('P4', 'none', 'no-facts', rr.id); continue }
   const cls = await classifyUpdate({ db, parentId: g.storyId, newFactIds: factIds })
+  if (cls.degraded) {
+    // Jev 挂了：分级不可信，不执行任何重写；severity 留空，下次运行重新判定
+    report.push({ story: g.storyId, rows: g.rows.length, skipped: 'jev-unavailable', reasons: cls.reasons })
+    continue
+  }
   let result = { severity: cls.severity, action: cls.action, reasons: cls.reasons }
   if (cls.action === 'rewrite') {
     // 小 Story（<1000 字）走专用整篇重写（绝对门限）
@@ -53,8 +58,8 @@ for (const g of groups.values()) {
       const parent = db.prepare('SELECT id,title,body_md FROM story WHERE id=?').get(g.storyId)
       if (parent?.body_md) {
         const insSf = db.prepare('INSERT OR REPLACE INTO story_fact(story_id,fact_id,section_id,char_start,char_end,role,order_idx) VALUES (?,?,?,?,?,?,?)')
-        db.exec('BEGIN')
-        try { for (const fid of factIds) insSf.run(parent.id, fid, null, 0, 0, 'update', 0); db.exec('COMMIT') } catch (e) { db.exec('ROLLBACK') }
+        db.exec('BEGIN IMMEDIATE')
+        try { for (const fid of factIds) insSf.run(parent.id, fid, null, 0, 0, 'update', 0); db.exec('COMMIT') } catch (e) { db.exec('ROLLBACK'); throw e }
         result.fallbackAppend = factIds.length
       }
     }
@@ -80,8 +85,8 @@ for (const g of groups.values()) {
       const parent = db.prepare('SELECT id,body_md FROM story WHERE id=?').get(g.storyId)
       if (parent?.body_md) {
         const insSf = db.prepare('INSERT OR REPLACE INTO story_fact(story_id,fact_id,section_id,char_start,char_end,role,order_idx) VALUES (?,?,?,?,?,?,?)')
-        db.exec('BEGIN')
-        try { for (const fid of factIds) insSf.run(g.storyId, fid, null, 0, 0, 'update', 0); db.exec('COMMIT') } catch (e) { db.exec('ROLLBACK') }
+        db.exec('BEGIN IMMEDIATE')
+        try { for (const fid of factIds) insSf.run(g.storyId, fid, null, 0, 0, 'update', 0); db.exec('COMMIT') } catch (e) { db.exec('ROLLBACK'); throw e }
         result.fallbackAppend = factIds.length
       }
     }
@@ -90,8 +95,8 @@ for (const g of groups.values()) {
     if (parent?.body_md) {
       const gapFacts = db.prepare(`SELECT id,canonical_text FROM fact WHERE id IN (${factIds.map(() => '?').join(',')})`).all(...factIds)
       const insSf = db.prepare('INSERT OR REPLACE INTO story_fact(story_id,fact_id,section_id,char_start,char_end,role,order_idx) VALUES (?,?,?,?,?,?,?)')
-      db.exec('BEGIN')
-      try { for (const f of gapFacts) insSf.run(parent.id, f.id, null, 0, 0, 'update', 0); db.exec('COMMIT') } catch (e) { db.exec('ROLLBACK') }
+      db.exec('BEGIN IMMEDIATE')
+      try { for (const f of gapFacts) insSf.run(parent.id, f.id, null, 0, 0, 'update', 0); db.exec('COMMIT') } catch (e) { db.exec('ROLLBACK'); throw e }
       result.appended = gapFacts.length
     }
   }

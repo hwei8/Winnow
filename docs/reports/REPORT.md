@@ -1,7 +1,7 @@
 # P0 技术验证报告 — 记忆底座
 
 > 目标：用 `Summary` 的 150 个视频资料库（不改动源数据），验证"记忆底座"的核心假设：**结构化 + claim 级 + 证据链 + 可查询** 是否成立，以及在 100 万条 claim 规模下的性能。
-> 位置：`/workspace/IM-Base/memory-p0`（独立于设计文档与源数据）
+> 位置：`<old-repo>/memory-p0`（独立于设计文档与源数据）
 > 结论：**底座成立，但有两处设计需要修正（词面去重不可用、聚类判据要改）。**
 
 ---
@@ -246,7 +246,7 @@ Story「MTP 加速 Qwen 模型」两个视频的 claim（实测）：
 ## 11. 复现方式
 
 ```bash
-cd /workspace/IM-Base/memory-p0
+cd <old-repo>/memory-p0
 node 01_ingest.mjs            # 导入（只读 Summary）
 node 02_cluster.mjs           # 聚类（约 5 分钟，8 批）
 node 02b_merge.mjs            # 跨批合并
@@ -354,7 +354,7 @@ LLM 网关没有 embeddings 端点（实测 `POST /embeddings` → 404），所�
 
 ### 12.7 Web 浏览界面（P0 验收物）
 
-`http://192.168.0.222:3083/`（容器内 `172.18.0.2:3083`）
+`http://<lan-host>:3083/`（容器内 `172.18.0.2:3083`）
 
 - **记忆流**：141 个事件卡片，无限滚动，可按"最近更新 / claim 最多"切换
 - **事件页**：条目信息 + claim 列表（kind 徽标、置信度、时间范围、证据原文、截图帧）+ 旧摘要折叠

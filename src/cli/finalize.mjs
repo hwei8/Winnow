@@ -1,7 +1,8 @@
-// ingest/finalize.mjs — 为流水线判定为 new 的条目建档并生成正文
-import { openDb, nowIso } from '../../shared/db.mjs'
-import { chat, extractJson } from '../../providers/llm.mjs'
-import { decide } from '../../providers/jev.mjs'
+// cli/finalize.mjs — 为流水线判定为 new 的条目建档并生成正文
+import { openDb, nowIso } from '../shared/db.mjs'
+import { chat, extractJson } from '../providers/llm.mjs'
+import { decide } from '../providers/jev.mjs'
+import { sectionId, upsertStory } from '../domains/story/store.mjs'
 
 const db = openDb()
 const CATS = { tech: '科技', politics: '政治', entertainment: '娱乐', history: '历史', business: '商业', society: '社会', world: '国际', science: '科学' }
@@ -16,7 +17,7 @@ for (const it of items) {
       MAX(CASE WHEN e.verified=1 THEN 1 ELSE 0 END) AS verified
     FROM claim c JOIN fact f ON f.id=c.fact_id
     LEFT JOIN claim_evidence e ON e.claim_id=c.id
-    WHERE c.item_id=? AND c.status!='meta'
+    WHERE c.item_id=? AND COALESCE(c.status,'')!='meta'
     GROUP BY f.id`).all(it.id)
   const verifiedFacts = allFacts.filter(f => Number(f.verified) === 1)
   const facts = verifiedFacts.length >= 2 ? verifiedFacts : allFacts
@@ -36,8 +37,8 @@ for (const it of items) {
   const segs = parsed.map(s => {
     let text = String(s.text || '')
     const leak = new Set((s.facts || []).filter(id => valid.has(id)))
-    text = text.replace(/[（(]\s*(F\d{5}(?:\s*[、,，]\s*F\d{5})*)\s*[）)]/g, (m, ids) => { ids.split(/[、,，]/).forEach(id => { if (valid.has(id.trim())) leak.add(id.trim()) }); return '' })
-    text = text.replace(/\bF\d{5}\b/g, (m) => { if (valid.has(m)) leak.add(m); return '' })
+    text = text.replace(/[（(]\s*(F\d{5,}(?:\s*[、,，]\s*F\d{5,})*)\s*[）)]/g, (m, ids) => { ids.split(/[、,，]/).forEach(id => { if (valid.has(id.trim())) leak.add(id.trim()) }); return '' })
+    text = text.replace(/\bF\d{5,}\b/g, (m) => { if (valid.has(m)) leak.add(m); return '' })
     return { text: text.trim(), facts: [...leak] }
   }).filter(s => s.text.length > 8)
   if (!segs.length) continue
@@ -52,15 +53,15 @@ for (const it of items) {
     const cr = await decide({ state: { text: body.slice(0, 3000), title: it.title }, questions: { c: { type: 'choice', instructions: 'Which single category best describes this article?', criteria: CATS } } })
     category = CATS[cr.answers.c?.choice] || '其他'; conf = cr.answers.c?.confidence ?? null
   } catch {}
-  db.exec('BEGIN')
+  db.exec('BEGIN IMMEDIATE')
   try {
-    db.prepare(`INSERT OR REPLACE INTO story(id,title,status,item_count,first_seen_ts,last_update_ts,anchor,validated,category,category_confidence,body_md,story_kind) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`)
-      .run(storyId, it.title, 'active', 1, Math.floor(Date.now() / 1000), Math.floor(Date.now() / 1000), null, 1, category, conf, body, 'story')
+    const nowTs = Math.floor(Date.now() / 1000)
+    upsertStory(db, { id: storyId, title: it.title, status: 'active', item_count: 1, first_seen_ts: nowTs, last_update_ts: nowTs, anchor: null, validated: 1, category, category_confidence: conf, body_md: body, story_kind: 'story' })
     db.prepare('INSERT OR IGNORE INTO story_item(story_id,item_id,role) VALUES (?,?,?)').run(storyId, it.id, 'source')
     db.prepare('INSERT OR REPLACE INTO story_section(id,story_id,order_idx,heading,body_md,char_start,char_end) VALUES (?,?,?,?,?,?,?)')
-      .run(`${storyId}:sec1`, storyId, 0, '摘要', body.replace(/^## .*\n\n/, '').trim(), 0, body.length)
+      .run(sectionId(storyId, 1), storyId, 0, '摘要', body.replace(/^## .*\n\n/, '').trim(), 0, body.length)
     const insSf = db.prepare('INSERT OR REPLACE INTO story_fact(story_id,fact_id,section_id,char_start,char_end,role,order_idx) VALUES (?,?,?,?,?,?,?)')
-    for (const a of anchors) insSf.run(storyId, a.fid, `${storyId}:sec1`, a.a, a.b, 'asserts', order++)
+    for (const a of anchors) insSf.run(storyId, a.fid, sectionId(storyId, 1), a.a, a.b, 'asserts', order++)
     db.exec('COMMIT')
   } catch (e) { db.exec('ROLLBACK'); throw e }
   console.log('created:', storyId, '|', it.title.slice(0, 40), '|', anchors.length, 'anchors')

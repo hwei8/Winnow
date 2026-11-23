@@ -3,6 +3,7 @@ import { fetchHtml, cleanBlocks, titleOfHtml } from './store.mjs'
 import { extractMainText } from './extract.mjs'
 import { blockText } from './feed.mjs'
 import { fetchViaDeepSeek } from '../../providers/search.mjs'
+import { assertPublicUrl } from '../../shared/net.mjs'
 
 const MIN_CHARS = Number(process.env.FETCH_MIN_CHARS || 500)
 
@@ -29,6 +30,8 @@ export async function fetchPage (url, { minChars = MIN_CHARS, allowFallback = pr
     if (text.length >= minChars) return { blocks, text, title: titleOfHtml(html), via: 'http' }
   } catch (e) { /* fallthrough */ }
   if (!allowFallback) throw new Error('too-short')
+  // 兜底会把 URL 发给第三方：内网地址绝不外发
+  await assertPublicUrl(url)
   const md = await fetchViaDeepSeek(url)
   const blocks = markdownToBlocks(md)
   const text = blockText(blocks)

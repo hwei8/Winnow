@@ -1,8 +1,8 @@
 // cli/beat.mjs — Beat Reporter CLI
-//   node beat.mjs --map                 # 覆盖地图
-//   node beat.mjs --topic=英伟达        # 单主题详情
-//   node beat.mjs --add=半导体 --weight=2
-//   node beat.mjs --report [--send]     # 兴趣缺口报告（可推 Telegram）
+//   node src/cli/beat.mjs --map                 # 覆盖地图
+//   node src/cli/beat.mjs --topic=英伟达        # 单主题详情
+//   node src/cli/beat.mjs --add=半导体 --weight=2
+//   node src/cli/beat.mjs --report [--send]     # 兴趣缺口报告（可推 Telegram）
 import { openDb } from '../shared/db.mjs'
 import { coverageMap, topicDetail, beatReport, addInterest, listInterests } from '../domains/insights/beat.mjs'
 import { sendMessage, toPlainText } from '../providers/telegram.mjs'

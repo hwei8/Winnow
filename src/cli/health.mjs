@@ -1,7 +1,5 @@
 // cli/health.mjs — 依赖健康检查（DB / embedding / Jev / Telegram）
-import { readFileSync } from 'node:fs'
-import path from 'node:path'
-import { openDb, ROOT } from '../shared/db.mjs'
+import { openDb } from '../shared/db.mjs'
 import { embedBatch, embedInfo } from '../providers/embed.mjs'
 
 const results = []
@@ -23,7 +21,8 @@ await check('jev', async () => {
   return `model=${r.model || '?'} noul=${JSON.stringify(r.probabilities)}`
 })
 await check('telegram', async () => {
-  const cfg = JSON.parse(readFileSync(path.join(ROOT, '.secrets', 'telegram.json'), 'utf8'))
+  const { telegramConfig } = await import('../providers/telegram.mjs')
+  const cfg = telegramConfig()
   const r = await fetch(`https://api.telegram.org/bot${cfg.bot_token}/getMe`, { signal: AbortSignal.timeout(10000) })
   const d = await r.json(); return d.ok ? `@${d.result.username}` : 'bad'
 })

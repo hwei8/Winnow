@@ -8,10 +8,13 @@ import path from 'node:path'
 import { openDb, ROOT } from '../../shared/db.mjs'
 import { decide } from '../../providers/jev.mjs'
 import { embedBatch } from '../../providers/embed.mjs'
+import { outPath, outFile } from '../../shared/config.mjs'
 
-const VEC_CACHE_FILE = path.join(ROOT, 'out', 'story-vectors.json')
+const VEC_CACHE_FILE = outPath('story-vectors.json') // 写时才建目录：导入模块不应有副作用
 function loadVecCache () { try { return JSON.parse(readFileSync(VEC_CACHE_FILE, 'utf8')) } catch { return {} } }
-function saveVecCache (c) { try { writeFileSync(VEC_CACHE_FILE, JSON.stringify(c)) } catch {} }
+function saveVecCache (c) {
+  try { writeFileSync(outFile('story-vectors.json'), JSON.stringify(c)) } catch (e) { console.error('[link] vector cache write failed:', String(e.message).slice(0, 120)) }
+}
 
 const embed = embedBatch
 const cos = (a, b) => { let s = 0; for (let i = 0; i < a.length; i++) s += a[i] * b[i]; return s }

@@ -3,8 +3,9 @@
 一个零依赖的 SSR 服务：`node:http` + 字符串模板 + 少量原生 JS。没有框架、没有构建步骤、没有前端依赖。
 
 ```bash
-npm run web            # 默认 http://0.0.0.0:3083
+npm run web                                   # 默认 http://127.0.0.1:3083（只本机）
 PORT=8080 npm run web
+HOST=0.0.0.0 WINNOW_WEB_TOKEN=… npm run web   # 局域网访问：必须设令牌，见 docs/operations.md「Web 安全」
 ```
 
 ## 页面

@@ -7,7 +7,7 @@
 import { readFileSync, existsSync } from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
-import { ROOT } from '../shared/db.mjs'
+import { readSecret } from '../shared/config.mjs'
 
 const SEARCH_ENDPOINT = process.env.DEEPSEEK_SEARCH_URL || 'https://api.deepseek.com/v1/tools/search'
 const FETCH_ENDPOINT = process.env.DEEPSEEK_FETCH_URL || 'https://api.deepseek.com/v1/tools/fetch'
@@ -27,10 +27,8 @@ function fromCredentialsYaml () {
 
 export function searchToken () {
   if (cachedToken) return cachedToken
-  const env = process.env.DEEPSEEK_SEARCH_TOKEN || process.env.DEEPSEEK_API_KEY
-  if (env) return (cachedToken = env.trim())
-  const f = path.join(ROOT, '.secrets/deepseek-search.token')
-  if (existsSync(f)) return (cachedToken = readFileSync(f, 'utf8').trim())
+  const t0 = readSecret('DEEPSEEK_SEARCH_TOKEN', 'deepseek-search.token') || readSecret('DEEPSEEK_API_KEY', 'deepseek-search.token')
+  if (t0) return (cachedToken = t0)
   const t = fromCredentialsYaml()
   if (t) return (cachedToken = t)
   throw new Error('no DeepSeek search token: set DEEPSEEK_SEARCH_TOKEN or .secrets/deepseek-search.token')
@@ -91,7 +89,9 @@ export async function search ({ query, count = 10, needContent = false, retries 
 }
 
 export function searchInfo () {
-  return { endpoint: ENDPOINT, fetchEndpoint: FETCH_ENDPOINT, qps: QPS, token: !!searchToken() }
+  let token = false
+  try { token = !!searchToken() } catch { /* 未配置：报告为 false，而不是让健康检查崩掉 */ }
+  return { endpoint: ENDPOINT, fetchEndpoint: FETCH_ENDPOINT, qps: QPS, token }
 }
 
 // DeepSeek 网页正文抓取（返回 Markdown 文本），用于反爬/JS 渲染页面的兜底

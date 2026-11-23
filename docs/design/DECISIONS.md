@@ -31,11 +31,11 @@
 
 ## D54 · Embedding 默认走本地 8033（向量完全等价）
 
-**基准**：本地 llama.cpp `bge-m3`（192.168.0.188:8033）16 条/批 p50 **130ms**，OpenRouter `baai/bge-m3` **466ms**（快 3.6×）；同一文本两路向量 **cos 均值 0.99994 / 最小 0.999927**，即同一权重，历史向量无需重建。
+**基准**：本地 llama.cpp `bge-m3`（<lan-host>:8033）16 条/批 p50 **130ms**，OpenRouter `baai/bge-m3` **466ms**（快 3.6×）；同一文本两路向量 **cos 均值 0.99994 / 最小 0.999927**，即同一权重，历史向量无需重建。
 
 **共跑代价**：4 路 embedding 打满时，decision 延迟 ×1.21（168→204ms），embedding 自身 ×5.45（127→692ms，仍有 93 条/秒）。两者抢同一台机，embedding 是受害者。
 
-**决策**：`lib/embed.mjs` 默认 `EMBED_PROVIDER=local` + `EMBED_BASE_URL=http://192.168.0.188:8033/v1/embeddings`，失败自动回退 OpenRouter（`EMBED_FALLBACK` 默认 1）。关掉本地用 `EMBED_PROVIDER=openrouter`。
+**决策**：`lib/embed.mjs` 默认 `EMBED_PROVIDER=local` + `EMBED_BASE_URL=http://<lan-host>:8033/v1/embeddings`，失败自动回退 OpenRouter（`EMBED_FALLBACK` 默认 1）。关掉本地用 `EMBED_PROVIDER=openrouter`。
 
 **被否决**：继续走 OpenRouter —— 慢 3.6× 且要花 token，收益为零（向量等价）。
 
@@ -63,7 +63,7 @@
 
 ## D52 · Embedding 回切 OpenRouter（旧 188 本地服务下线，P6.1）
 
-新机器迁移后旧机的本地 bge-m3（192.168.0.188:8033）不再可用。决定：
+新机器迁移后旧机的本地 bge-m3（<lan-host>:8033）不再可用。决定：
 
 - `lib/embed.mjs` 默认 `EMBED_PROVIDER=openrouter`（`baai/bge-m3`，1024 维），本地模式仅保留为可选（`EMBED_PROVIDER=local` + `EMBED_BASE_URL`）；
 - 向量空间不变（同一模型，历史 fact/story 向量仍兼容，无需重建）；
@@ -235,7 +235,7 @@
 
 ## D42 · Embedding 切本地 bge-m3（P3.1）
 
-用户本地已架好 embedding 服务：`http://192.168.0.188:8033/v1/embeddings`（llama.cpp 跑 bge-m3，1024 维）。实测：
+用户本地已架好 embedding 服务：`http://<lan-host>:8033/v1/embeddings`（llama.cpp 跑 bge-m3，1024 维）。实测：
 
 | 指标 | 本地 | OpenRouter |
 |---|---|---|
@@ -797,7 +797,7 @@ Web：Story 页显示"质检 XX"徽章（悬停看覆盖率/重复率/矛盾数�
 2. **数字归一化踩到并修复一次数据完整性事故**：LLM 返回数组与输入不保证对齐，按下标匹配会把值错配到别的主张；改为 **ID 键控 + 原文数字校验**，400/522 结构化，119 条因对不上而拒绝。
 3. **去重机制**：网关无 embeddings 端点（404），改用多路结构召回 + LLM 裁决。真实数据 4,707 候选 → 1 条真重复；合成控制组召回 **16/20 = 80%**、假阳性 0。**召回瓶颈在候选生成，生产必须补 embedding 一路。**
 4. **全量抽取完成**：142/142 条视频、0 失败，3,778 条 claim（26.6/视频，1.76/分钟），证据 100%、带帧 69.5%、类型化 50.3%。
-5. **Web 浏览界面交付**：`http://192.168.0.188:3083/`（记忆流 / 事件页 / 实体页 / 中文搜索，SSR，只读库）。
+5. **Web 浏览界面交付**：`http://<lan-host>:3083/`（记忆流 / 事件页 / 实体页 / 中文搜索，SSR，只读库）。
 
 **据此确认的工程纪律**：① 任何"LLM 返回数组"的映射必须键控 + 校验，不能信下标；② 判定类调用必须带阴性对照，否则会得到自信的错误结论。
 

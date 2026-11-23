@@ -2,6 +2,7 @@
 import { chat, extractJson } from '../../providers/llm.mjs'
 import { decide } from '../../providers/jev.mjs'
 import { snapshot, restore } from './rewrite.mjs'
+import { sectionId } from './store.mjs'
 
 const norm = (s) => String(s || '').toLowerCase().replace(/[\s\p{P}]/gu, '')
 const tri = (s) => { const x = norm(s); const t = new Set(); for (let i = 0; i < x.length - 2; i++) t.add(x.slice(i, i + 3)); return t }
@@ -48,8 +49,8 @@ export async function rewriteTargeted ({ db, storyId, newFactIds = [], note = ''
     const parts = segs.map(s => {
       let text = String(s.text || '')
       const leak = new Set((s.facts || []).filter(id => valid.has(id)))
-      text = text.replace(/[（(]\s*(F\d{5}(?:\s*[、,，]\s*F\d{5})*)\s*[）)]/g, (m, ids) => { ids.split(/[、,，]/).forEach(id => { if (valid.has(id.trim())) leak.add(id.trim()) }); return '' })
-      text = text.replace(/\bF\d{5}\b/g, (m) => { if (valid.has(m)) leak.add(m); return '' })
+      text = text.replace(/[（(]\s*(F\d{5,}(?:\s*[、,，]\s*F\d{5,})*)\s*[）)]/g, (m, ids) => { ids.split(/[、,，]/).forEach(id => { if (valid.has(id.trim())) leak.add(id.trim()) }); return '' })
+      text = text.replace(/\bF\d{5,}\b/g, (m) => { if (valid.has(m)) leak.add(m); return '' })
       return { text: text.trim(), facts: [...leak] }
     }).filter(s => s.text.length > 8)
     if (parts.length) {
@@ -64,8 +65,8 @@ export async function rewriteTargeted ({ db, storyId, newFactIds = [], note = ''
             const parts2 = p2.segments.map(sg => {
               let text = String(sg.text || '')
               const leak = new Set((sg.facts || []).filter(id => valid.has(id)))
-              text = text.replace(/[（(]\s*(F\d{5}(?:\s*[、,，]\s*F\d{5})*)\s*[）)]/g, (m, ids) => { ids.split(/[、,，]/).forEach(id => { if (valid.has(id.trim())) leak.add(id.trim()) }); return '' })
-              text = text.replace(/\bF\d{5}\b/g, (m) => { if (valid.has(m)) leak.add(m); return '' })
+              text = text.replace(/[（(]\s*(F\d{5,}(?:\s*[、,，]\s*F\d{5,})*)\s*[）)]/g, (m, ids) => { ids.split(/[、,，]/).forEach(id => { if (valid.has(id.trim())) leak.add(id.trim()) }); return '' })
+              text = text.replace(/\bF\d{5,}\b/g, (m) => { if (valid.has(m)) leak.add(m); return '' })
               return { text: text.trim(), facts: [...leak] }
             }).filter(sg => sg.text.length > 8)
             const used2 = new Set(parts2.flatMap(x => x.facts))
@@ -104,7 +105,7 @@ export async function rewriteTargeted ({ db, storyId, newFactIds = [], note = ''
         anchors.push({ fid: an.fact_id, a: start + rel, b: start + relEnd })
       }
     }
-    outSections.push({ id: `${storyId}:sec${i + 1}`, heading: sec.heading, body_md: body.slice(start, body.length).replace(/^## .*\n\n/, '').trim(), char_start: start, char_end: body.length })
+    outSections.push({ id: sectionId(storyId, i + 1), heading: sec.heading, body_md: body.slice(start, body.length).replace(/^## .*\n\n/, '').trim(), char_start: start, char_end: body.length })
   })
 
   // QA 闸门
@@ -121,7 +122,7 @@ export async function rewriteTargeted ({ db, storyId, newFactIds = [], note = ''
     restore(db, storyId, snap.version)
     return { rolled_back: true, reason: 'dup-gate', dupBefore: +dupBefore.toFixed(2), dupAfter: +dupAfter.toFixed(2) }
   }
-  db.exec('BEGIN')
+  db.exec('BEGIN IMMEDIATE')
   try {
     db.prepare('UPDATE story SET body_md=?, last_update_ts=? WHERE id=?').run(body, Math.floor(Date.now() / 1000), storyId)
     db.prepare('DELETE FROM story_section WHERE story_id=?').run(storyId)

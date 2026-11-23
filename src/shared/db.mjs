@@ -14,6 +14,8 @@ export { DB_PATH, ROOT, SUMMARY_ROOT, DATA_DIR }
 export function openDb (dbPath = DB_PATH) {
   mkdirSync(path.dirname(dbPath), { recursive: true })
   const db = new DatabaseSync(dbPath)
+  // 多个写进程（daemon / worker / web）并存：等锁而不是立刻 SQLITE_BUSY
+  db.exec('PRAGMA busy_timeout = 10000')
   db.exec('PRAGMA journal_mode = WAL')
   db.exec('PRAGMA synchronous = NORMAL')
   db.exec('PRAGMA cache_size = -64000')

@@ -12,7 +12,7 @@ export async function realignAnchors (db, storyId) {
   const story = db.prepare('SELECT id,title,body_md FROM story WHERE id=?').get(storyId)
   if (!story?.body_md) return { error: 'no-body' }
   const facts = db.prepare(`SELECT DISTINCT f.id,f.canonical_text FROM story_item si JOIN claim c ON c.item_id=si.item_id JOIN fact f ON f.id=c.fact_id
-    WHERE si.story_id=? AND c.status!='meta'`).all(storyId)
+    WHERE si.story_id=? AND COALESCE(c.status,'')!='meta'`).all(storyId)
   if (facts.length < 2) return { skipped: 'no-facts' }
   const sents = []
   const re = /[^。！？\n]+[。！？]?/g
@@ -37,7 +37,7 @@ export async function realignAnchors (db, storyId) {
   if (pairs.length) { try { const r = await decide({ state, questions, timeoutMs: 120000 }); answers = r.answers || {} } catch {} }
   const accepted = pairs.filter((p, k) => (answers['q' + k]?.noul ?? 0) >= 0.6)
   if (!accepted.length) return { skipped: 'no-matches' }
-  db.exec('BEGIN')
+  db.exec('BEGIN IMMEDIATE')
   try {
     db.prepare('DELETE FROM story_fact WHERE story_id=?').run(storyId)
     const ins = db.prepare('INSERT OR REPLACE INTO story_fact(story_id,fact_id,section_id,char_start,char_end,role,order_idx) VALUES (?,?,?,?,?,?,?)')

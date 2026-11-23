@@ -40,7 +40,8 @@
 | 模块 | 职责 |
 |---|---|
 | `config.mjs` | **唯一**的路径 / 环境变量 / 密钥入口。`.env` 自动加载，不覆盖已有 env |
-| `db.mjs` | `openDb()` / `freshDb()`（WAL、外键、busy_timeout），以及文本小工具 |
+| `db.mjs` | `openDb()` / `freshDb()`（WAL、busy_timeout；外键约束未启用，见 data-model），以及文本小工具 |
+| `net.mjs` | 出站抓取护栏：只允许公网 http(s)、逐跳校验重定向、响应体上限（防 SSRF） |
 | `schema.mjs` | 数据库 schema 的**唯一权威定义**（v16，50 表 + 索引，全部 `IF NOT EXISTS`） |
 | `pool.mjs` | 全局并发池：限流 + 429 感知（默认 10 并发） |
 
@@ -52,7 +53,7 @@
 | `embed.mjs` | 向量化，1024 维 | `EMBED_PROVIDER=openrouter\|local`，失败自动兜底 |
 | `jev.mjs` | 「是否同一事件 / 同一事实」判定（返回 0–1） | Zen 免费通道优先，OpenRouter 兜底 |
 | `search.mjs` | 搜索发现 + 正文抓取兜底 | `DEEPSEEK_SEARCH_TOKEN`，5 QPS 限速 |
-| `telegram.mjs` | IM 推送（3500 字分片、HTML 转义） | `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` |
+| `telegram.mjs` | IM 推送（3500 字分片；默认纯文本，HTML 模式需调用方 `escapeHtml`） | `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` |
 
 所有 provider 都**惰性取密钥**：模块可以被 import 而不触发凭据读取，测试环境无需真 key。
 
@@ -63,14 +64,13 @@
 | **ingest** | `adapters/{rss,hn,newsnow}.mjs` | 源适配器，统一契约 `list / fetch / normalize / health` |
 | | `registry.mjs` | 注册表 + `collect()`（自动建 `source` 行、健康记录） |
 | | `feed.mjs` | 零依赖 RSS/Atom 解析、HTML→blocks、引文定位 |
-| | `extract.mjs` / `page.mjs` | 正文抽取；直连失败时用搜索 API 的 fetch 兜底 |
-| | `store.mjs` | 条目入库（`item` + `item_block`） |
-| | `pipeline.mjs` | 入库主流程：抓取 → 抽 claim → 归簇 → 链接判定 → 新建/更新 |
-| | `finalize.mjs` | 为判定为 `new` 的条目建档、生成首版正文 |
-| | `queue.mjs` | 待入库队列（Web / Beat 一键入库） |
+| | `html.mjs` | 线性时间的元素扫描（替代会退化成 O(n²) 的正则） |
+| | `extract.mjs` / `page.mjs` | 正文抽取；直连失败时用搜索 API 的 fetch 兜底（内网地址不外发） |
+| | `store.mjs` | 条目抓取与入库（`item` upsert + `item_block`） |
+| | `queue.mjs` | 待入库队列（入队闸门、原子领取、卡死回收） |
 | **knowledge** | `facts.mjs` | claim → fact 归簇（向量召回 + Jev） |
 | | `link.mjs` | 新内容 → 已有 Story 的链接与事实缺口分析 |
-| | `align.mjs` / `realign.mjs` | 句子 ↔ 事实的锚点对齐与修复 |
+| | `align.mjs` | 句子 ↔ 事实的锚点对齐与修复 |
 | | `evidence.mjs` | 证据门禁：引文必须能在原文中定位 |
 | | `alias.mjs` | 主题别名（英伟达 ↔ NVIDIA），供跨语言检索 |
 | **story** | `policy.mjs` | 更新分级 P0–P4 + 是否节合并 |
@@ -78,9 +78,7 @@
 | | `rewrite-targeted.mjs` | 定向重写：只重写受影响的小节 |
 | | `rewrite-small.mjs` | 短 Story 整篇重生成 |
 | | `consolidate.mjs` | 节合并：多个「最新进展」合成一节 |
-| | `apply-policy.mjs` / `apply-consolidate.mjs` | 批量执行器（带分组、幂等、失败回落） |
-| | `qa.mjs` | QA 打分 v3（7 个维度 + 惩罚项） |
-| | `regression.mjs` | 用真实更新回放策略，只判定不执行 |
+| | `store.mjs` | `sectionId()` 唯一格式、`upsertStory()`、历史章节 id 修复 |
 | **memory** | `state.mjs` | 知识水位（看过 / 已知 / 已追平）+ capture |
 | | `annotation.mjs` | 标注闭环：known / wrong / agree / disagree / read |
 | | `depth.mjs` | 三轴下探：时间线 / 证据 / L4 深研（按需生成并缓存） |
@@ -95,7 +93,14 @@
 
 | 命令 | 作用 |
 |---|---|
-| `cli/pipeline.mjs` | 一键流水线（采集 → 入库 → 更新 → 合并 → QA → 日报） |
+| `cli/pipeline.mjs` | 一键流水线（采集 → 入库 → 更新 → 合并 → QA → 日报），依次调用下面几个 |
+| `cli/ingest.mjs` | 入库主流程：抓取 → 抽 claim → 归簇 → 链接判定 → 新建/更新 |
+| `cli/finalize.mjs` | 为判定为 `new` 的条目建档、生成首版正文 |
+| `cli/apply-policy.mjs` / `cli/apply-consolidate.mjs` | 批量执行更新分级 / 节合并（Jev 不可用时跳过，留待下次） |
+| `cli/qa.mjs` | QA 打分 v3（7 个维度 + 惩罚项） |
+| `cli/realign.mjs` | 批量锚点重对齐 |
+| `cli/policy-regression.mjs` | 用真实更新回放策略，只判定不执行 |
+| `cli/worker.mjs` | 消费入库队列 |
 | `cli/collect.mjs` | 只采集 |
 | `cli/brief.mjs` | 生成 / 推送简报 |
 | `cli/daemon.mjs` | 每日调度（`--once` / `--loop --at=08:00`） |
@@ -122,7 +127,7 @@
 ```mermaid
 sequenceDiagram
   participant AD as adapter
-  participant IP as ingest/pipeline
+  participant IP as cli/ingest
   participant KF as knowledge/facts
   participant KL as knowledge/link
   participant SP as story/policy

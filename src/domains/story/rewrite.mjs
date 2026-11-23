@@ -1,6 +1,7 @@
 // story/rewrite.mjs — Story 重写：快照 → 全量重生成 → QA 闸门 → 必要时回滚
 import { chat, extractJson } from '../../providers/llm.mjs'
 import { decide } from '../../providers/jev.mjs'
+import { sectionId } from './store.mjs'
 
 const TH = { coverage: 0.0, align: 0.0 }
 
@@ -23,7 +24,7 @@ export function restore (db, storyId, version) {
   if (!v) return false
   const sections = JSON.parse(v.sections_json || '[]')
   const facts = JSON.parse(v.facts_json || '[]')
-  db.exec('BEGIN')
+  db.exec('BEGIN IMMEDIATE')
   try {
     db.prepare('UPDATE story SET body_md=?, category=? WHERE id=?').run(v.body_md, v.category, storyId)
     db.prepare('DELETE FROM story_section WHERE story_id=?').run(storyId)
@@ -84,8 +85,8 @@ ${fl}
     const segs = (sec.segments || []).map(s => {
       let text = String(s.text || '')
       const leak = new Set((s.facts || []).filter(id => valid.has(id)))
-      text = text.replace(/[（(]\s*(F\d{5}(?:\s*[、,，]\s*F\d{5})*)\s*[）)]/g, (m, ids) => { ids.split(/[、,，]/).forEach(id => { if (valid.has(id.trim())) leak.add(id.trim()) }); return '' })
-      text = text.replace(/\bF\d{5}\b/g, (m) => { if (valid.has(m)) leak.add(m); return '' })
+      text = text.replace(/[（(]\s*(F\d{5,}(?:\s*[、,，]\s*F\d{5,})*)\s*[）)]/g, (m, ids) => { ids.split(/[、,，]/).forEach(id => { if (valid.has(id.trim())) leak.add(id.trim()) }); return '' })
+      text = text.replace(/\bF\d{5,}\b/g, (m) => { if (valid.has(m)) leak.add(m); return '' })
       return { text: text.trim(), facts: [...leak] }
     }).filter(s => s.text.length > 8)
     if (!segs.length) continue
@@ -96,7 +97,7 @@ ${fl}
       for (const fid of new Set(seg.facts)) anchors.push({ fid, a, b })
       body += '\n\n'
     }
-    sections.push({ id: `${storyId}:sec${sections.length + 1}`, heading: sec.heading, body_md: body.slice(start, body.length).replace(/^## .*\n\n/, '').trim(), char_start: start, char_end: body.length })
+    sections.push({ id: sectionId(storyId, sections.length + 1), heading: sec.heading, body_md: body.slice(start, body.length).replace(/^## .*\n\n/, '').trim(), char_start: start, char_end: body.length })
   }
   if (body.length < 300) { return { error: 'empty-body' } }
   // 保护：事实覆盖率优先，长度作为次要约束
@@ -114,15 +115,15 @@ ${fl}
           const segs = (sec.segments || []).map(sg => {
             let text = String(sg.text || '')
             const leak = new Set((sg.facts || []).filter(id => valid.has(id)))
-            text = text.replace(/[（(]\s*(F\d{5}(?:\s*[、,，]\s*F\d{5})*)\s*[）)]/g, (m, ids) => { ids.split(/[、,，]/).forEach(id => { if (valid.has(id.trim())) leak.add(id.trim()) }); return '' })
-            text = text.replace(/\bF\d{5}\b/g, (m) => { if (valid.has(m)) leak.add(m); return '' })
+            text = text.replace(/[（(]\s*(F\d{5,}(?:\s*[、,，]\s*F\d{5,})*)\s*[）)]/g, (m, ids) => { ids.split(/[、,，]/).forEach(id => { if (valid.has(id.trim())) leak.add(id.trim()) }); return '' })
+            text = text.replace(/\bF\d{5,}\b/g, (m) => { if (valid.has(m)) leak.add(m); return '' })
             return { text: text.trim(), facts: [...leak] }
           }).filter(s => s.text.length > 8)
           if (!segs.length) continue
           const st = body2.length
           body2 += `## ${sec.heading}\n\n`
           for (const sg of segs) { const a = body2.length; body2 += sg.text; const b = body2.length; for (const fid of new Set(sg.facts)) anchors2.push({ fid, a, b }); body2 += '\n\n' }
-          sections2.push({ id: `${storyId}:sec${sections2.length + 1}`, heading: sec.heading, body_md: body2.slice(st, body2.length).replace(/^## .*\n\n/, '').trim(), char_start: st, char_end: body2.length })
+          sections2.push({ id: sectionId(storyId, sections2.length + 1), heading: sec.heading, body_md: body2.slice(st, body2.length).replace(/^## .*\n\n/, '').trim(), char_start: st, char_end: body2.length })
         }
         if (body2.length >= oldChars * 0.80) { body = body2; sections.splice(0, sections.length, ...sections2); anchors.splice(0, anchors.length, ...anchors2) }
       }
@@ -147,7 +148,7 @@ ${fl}
     return { rolled_back: true, scoreBefore, scoreAfter }
   }
 
-  db.exec('BEGIN')
+  db.exec('BEGIN IMMEDIATE')
   try {
     db.prepare('UPDATE story SET body_md=?, last_update_ts=? WHERE id=?').run(body, Math.floor(Date.now() / 1000), storyId)
     db.prepare('DELETE FROM story_section WHERE story_id=?').run(storyId)

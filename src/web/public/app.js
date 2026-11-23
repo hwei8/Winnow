@@ -21,6 +21,14 @@ try {
 
 const page = document.body.dataset.page || 'stream'
 
+const escHtml = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c])
+
+// 证据缩略图加载失败就移除（替代模板里的内联 onerror：CSP 禁止内联脚本）
+document.addEventListener('error', (e) => {
+  const img = e.target
+  if (img instanceof HTMLImageElement && img.closest('.thumb')) img.closest('.thumb').remove()
+}, true)
+
 /* ── 小工具 ─────────────────────────────────────────────────── */
 
 const $ = (sel, root = document) => root.querySelector(sel)
@@ -295,7 +303,7 @@ async function showTranscript(itemId) {
     const data = await fetchJson(`/api/item/${encodeURIComponent(itemId)}`)
     openDrawer(transcriptHtml(data))
   } catch {
-    openDrawer(`<div class="drawer-body"><p class="empty-inline">转写加载失败（/api/item/${itemId}）。</p></div>`)
+    openDrawer(`<div class="drawer-body"><p class="empty-inline">转写加载失败（/api/item/${escHtml(itemId)}）。</p></div>`)
   }
 }
 
@@ -347,7 +355,7 @@ document.addEventListener('click', async (e) => {
   ing.textContent = '已入队…'
   try {
     await fetch('/api/ingest', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ urls: [ing.dataset.ingest] }) })
-    fetch('/api/ingest-run', { method: 'POST' }).catch(() => {})
+    fetch('/api/ingest-run', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' }).catch(() => {})
   } catch { ing.disabled = false }
 })
 
@@ -458,56 +466,6 @@ async function initStoryFacts() {
     })
   })
   panel?.querySelector('.fact-panel-close')?.addEventListener('click', () => { panel.hidden = true })
-}
-
-document.addEventListener('click', async (e) => {
-  const ing = e.target.closest('[data-ingest]')
-  if (!ing) return
-  ing.disabled = true
-  ing.textContent = '已入队…'
-  try {
-    await fetch('/api/ingest', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ urls: [ing.dataset.ingest] }) })
-    fetch('/api/ingest-run', { method: 'POST' }).catch(() => {})
-  } catch { ing.disabled = false }
-})
-
-if (page === 'topic') {
-  document.addEventListener('click', async (e) => {
-    const btn = e.target.closest('[data-interest]')
-    if (!btn) return
-    try {
-      const r = await fetch('/api/interest', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ topic: btn.dataset.interest }) })
-      if (r.ok) location.reload()
-    } catch {}
-  })
-}
-
-if (page === 'search') {
-  const form = document.getElementById('search-page-form')
-  form?.addEventListener('submit', (e) => {
-    e.preventDefault()
-    const q = document.getElementById('search-page-input')?.value?.trim()
-    if (q) location.href = `/search?q=${encodeURIComponent(q)}`
-  })
-}
-
-if (page === 'memory') {
-  const form = document.getElementById('capture-form')
-  form?.addEventListener('submit', async (e) => {
-    e.preventDefault()
-    const content = document.getElementById('cap-content')?.value?.trim()
-    if (!content) return
-    const body = {
-      kind: document.getElementById('cap-kind')?.value || 'idea',
-      content,
-      intent: document.getElementById('cap-intent')?.value?.trim() || null,
-      reviewAt: document.getElementById('cap-review')?.value || null
-    }
-    try {
-      const r = await fetch('/api/capture', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
-      if (r.ok) location.reload()
-    } catch {}
-  })
 }
 
 if (page === 'story') {

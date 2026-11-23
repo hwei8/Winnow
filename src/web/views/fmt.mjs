@@ -19,6 +19,23 @@ export function esc(v) {
   return String(v).replace(/[&<>"']/g, (c) => ESC_MAP[c])
 }
 
+/**
+ * 链接白名单：只放行 http(s) 绝对地址与站内相对路径（/xxx、#xxx），其余（javascript:、data:、
+ * vbscript:、//evil 协议相对地址等）一律变成 '#'。esc() 只防属性逃逸，不防危险协议。
+ */
+export function safeUrl(v) {
+  const s = String(v ?? '').trim()
+  if (!s) return '#'
+  if (s.startsWith('#')) return s
+  if (s.startsWith('/') && !s.startsWith('//') && !s.startsWith('/\\')) return s
+  try {
+    const u = new URL(s)
+    return u.protocol === 'http:' || u.protocol === 'https:' ? u.href : '#'
+  } catch {
+    return '#'
+  }
+}
+
 /** 数字或 null（避免把 NaN / undefined 塞进 JSON） */
 export function num(v) {
   const n = typeof v === 'number' ? v : Number(v)

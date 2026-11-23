@@ -1,6 +1,6 @@
 // cli/drill.mjs — 降级演练：模拟依赖中断，验证 fallback 是否生效
-//   node drill.mjs            # 全部场景
-//   node drill.mjs --scenario=embed|jev|telegram
+//   node src/cli/drill.mjs            # 全部场景
+//   node src/cli/drill.mjs --scenario=embed|jev|telegram
 import { spawnSync } from 'node:child_process'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'

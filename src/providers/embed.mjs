@@ -6,9 +6,7 @@
 //   EMBED_MODEL     local 模型名，默认 bge-m3
 //   EMBED_FALLBACK  默认 1（local 失败时回退 OpenRouter）
 //   OPENROUTER_API_KEY / .secrets/openrouter.key
-import { readFileSync } from 'node:fs'
-import path from 'node:path'
-import { ROOT } from '../shared/db.mjs'
+import { readSecret } from '../shared/config.mjs'
 
 const LOCAL_URL = process.env.EMBED_BASE_URL || 'http://127.0.0.1:8033/v1/embeddings'
 const PROVIDER = process.env.EMBED_PROVIDER || 'openrouter'
@@ -18,11 +16,7 @@ const OR_MODEL = process.env.EMBED_OR_MODEL || 'baai/bge-m3'
 const FALLBACK = process.env.EMBED_FALLBACK !== '0'
 const BATCH = Number(process.env.EMBED_BATCH || 32)
 
-
-function orKey () {
-  if (process.env.OPENROUTER_API_KEY) return process.env.OPENROUTER_API_KEY.trim()
-  try { return readFileSync(path.join(ROOT, '.secrets/openrouter.key'), 'utf8').trim() } catch { return null }
-}
+const orKey = () => readSecret('OPENROUTER_API_KEY', 'openrouter.key')
 
 async function post (url, headers, body) {
   const res = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: JSON.stringify(body), signal: AbortSignal.timeout(60000) })

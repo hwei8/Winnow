@@ -5,7 +5,7 @@
   "description": "个人记忆与信息过滤系统：把新闻洪流折叠成可读的 Story，记住你想记的东西。",
   "type": "module",
   "engines": {
-    "node": ">=22.5.0"
+    "node": ">=22.13.0"
   },
   "scripts": {
     "web": "node src/web/server.mjs",
@@ -19,11 +19,13 @@
     "db:stats": "node src/cli/db.mjs --stats",
     "db:backup": "node src/cli/db.mjs --backup",
     "test": "node --test tests/*.test.mjs",
-    "check": "node scripts/check-syntax.mjs"
+    "check": "node tests/check-syntax.mjs",
+    "db:repair": "node src/cli/db.mjs --repair",
+    "worker": "node src/cli/worker.mjs"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/OWNER/winnow.git"
+    "url": "git+https://github.com/hwei8/Winnow.git"
   },
   "keywords": [
     "personal-memory",
@@ -35,11 +37,8 @@
     "llm"
   ],
   "license": "MIT",
-  "dependencies": {
-    "sqlite-vec": "^0.1.9"
-  },
   "bugs": {
-    "url": "https://github.com/OWNER/winnow/issues"
+    "url": "https://github.com/hwei8/Winnow/issues"
   },
-  "homepage": "https://github.com/OWNER/winnow#readme"
+  "homepage": "https://github.com/hwei8/Winnow#readme"
 }

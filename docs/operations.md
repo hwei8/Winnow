@@ -4,10 +4,10 @@
 
 | 项 | 要求 |
 |---|---|
-| Node | ≥ 22.5（依赖 `node:sqlite`；本项目在 v24 上开发） |
+| Node | ≥ 22.13（`node:sqlite` 从 22.13 起无需 `--experimental-sqlite`；本项目在 v24 上开发） |
 | 磁盘 | 库 ~70MB / 1k 篇 Story；`out/` 会持续增长（可定期清理） |
 | 网络 | 出站 HTTPS（LLM / embedding / 搜索 / RSS） |
-| 依赖 | `sqlite-vec`（唯一 npm 依赖，提供向量检索的 SQLite 扩展） |
+| 依赖 | 无 npm 运行时依赖（只用 Node 内置模块；向量相似度在 JS 里计算） |
 
 单机、单进程、一个 SQLite 文件。不需要 Docker、不需要数据库服务。
 
@@ -24,17 +24,37 @@
 | `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` | 可选 | 简报推送 |
 | `WINNOW_DB` | 可选 | 数据库路径（默认 `data/winnow.db`） |
 | `WINNOW_DATA_DIR` / `WINNOW_OUT_DIR` | 可选 | 数据 / 产物目录 |
-| `HOST` / `PORT` | 可选 | Web 监听（默认 `0.0.0.0:3083`） |
+| `HOST` / `PORT` | 可选 | Web 监听（默认 `127.0.0.1:3083`，只本机可访问） |
+| `WINNOW_WEB_TOKEN` | 暴露到局域网时必填 | Web 访问令牌；设置后所有请求都要带（见下文「Web 安全」） |
+| `WINNOW_ALLOWED_HOSTS` | 可选 | 反代 / 自定义域名时追加允许的 Host，逗号分隔 |
+| `WINNOW_PUBLIC_URL` | 可选 | 简报里 Story 链接的前缀，如 `https://winnow.example.com` |
+| `WINNOW_TZ` | 可选 | 简报 / 日报的日期时区（默认 `Asia/Shanghai`） |
+| `LLM_CHAT_MODEL` | 可选 | chat 模型名（默认 `deepseek-v4.1-flash`） |
+| `WINNOW_ALLOW_PRIVATE_FETCH=1` | 可选 | 允许抓取内网 / 本机地址（默认禁止，防 SSRF；仅本地调试用） |
 | `EMBED_PROVIDER` | 可选 | `openrouter`（默认）/ `local` |
 | `FETCH_FALLBACK=0` | 可选 | 关闭搜索 API 正文兜底 |
 
 ### 密钥的三种放法
 
 1. `.env`（最简单，已在 `.gitignore`）；
-2. `.secrets/<name>`（`ZEN_API_KEY` → `.secrets/zen.key`）；
+2. `.secrets/<name>`：`opencode-go.key`、`openrouter.key`、`zen.key`、`deepseek-search.token`、`telegram.json`（`{"bot_token","chat_id"}`）——所有 provider 都经 `config.readSecret()` 读取，环境变量优先；
 3. 复用 DSH 凭据文件：`WINNOW_CREDENTIALS_FILE=/path/.credentials.yaml`。
 
 代码里**没有**默认 key、默认主机名、默认用户目录。
+
+## Web 安全
+
+Web 没有登录系统，写接口（捕获 / 标注 / 深研 / 一键入库）会改库、花 LLM 额度、触发出站抓取。防护分四层：
+
+1. **默认只监听 `127.0.0.1`**。要在手机 / 局域网访问，设置 `HOST=0.0.0.0` **并且**设置 `WINNOW_WEB_TOKEN`；
+   首次访问 `http://<ip>:3083/?token=<令牌>`，之后由 HttpOnly cookie 保持。启动时未设令牌会打印警告。
+2. **Host 白名单**：未设令牌时只接受 `localhost` / `127.0.0.1` / 本机网卡地址作为 Host，挡 DNS rebinding。
+   反代到自定义域名时用 `WINNOW_ALLOWED_HOSTS=winnow.example.com` 追加。
+3. **跨站请求防护**：`POST /api/*` 只接受 `application/json`，且 `Origin` / `Sec-Fetch-Site` 必须同源。
+4. **出站抓取护栏**（`src/shared/net.mjs`）：入库 URL 只允许公网 http(s)，DNS 解析结果与每一跳重定向都会校验，
+   响应体上限 5MB；内网地址也不会被发给第三方正文兜底服务。
+
+另有 CSP（只允许本站脚本）、`X-Frame-Options: DENY`，以及模板里外链的协议白名单（`safeUrl`）。
 
 ## 部署
 

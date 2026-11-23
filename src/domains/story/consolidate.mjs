@@ -10,12 +10,17 @@
 import { chat, extractJson } from '../../providers/llm.mjs'
 import { snapshot, restore } from './rewrite.mjs'
 import { realignAnchors } from '../knowledge/align.mjs'
+import { sectionId } from './store.mjs'
 
 const DEFAULTS = { minSections: 2, maxMerge: 8, lenRatio: 0.2, absMinLen: 50, coverageTh: 0.95, dupTh: 0.15, retries: 2 }
 const tri = (s) => { const x = String(s || '').toLowerCase().replace(/[\s\p{P}]/gu, ''); const t = new Set(); for (let i = 0; i < x.length - 2; i++) t.add(x.slice(i, i + 3)); return t }
 const jac = (a, b) => { const A = tri(a), B = tri(b); if (!A.size || !B.size) return 0; let n = 0; for (const g of A) if (B.has(g)) n++; return n / (A.size + B.size - n) }
 const dupOf = (txt) => { const ss = txt.split(/[。！？\n]+/).map(x => x.trim()).filter(x => x.length >= 12); let d = 0; for (let i = 0; i < ss.length; i++) for (let j = i + 1; j < ss.length; j++) if (jac(ss[i], ss[j]) >= 0.82) d++; return ss.length ? d / ss.length : 0 }
 const isUpdateHeading = (h) => /^最新进展/.test(String(h || ''))
+
+// 兼容历史数据：早期生成器把 section_id 写成裸的 `secN`（见 story/store.mjs）。
+// `db.mjs --repair` 会修正存量；这里同时按两种格式查，避免漏掉锚点后被 DELETE 掉。
+const legacySectionId = (fullId) => String(fullId).split(':').pop()
 
 export async function consolidateSections ({ db, storyId, params = {} }) {
   const P = { ...DEFAULTS, ...params }
@@ -31,7 +36,7 @@ export async function consolidateSections ({ db, storyId, params = {} }) {
   const facts = new Map()
   for (const sec of mergeList) {
     const rows = db.prepare(`SELECT fact_id FROM story_fact WHERE story_id=? AND (
-      section_id=? OR (char_start >= ? AND char_end <= ? AND (section_id IS NULL OR section_id='')))`).all(storyId, sec.id, sec.char_start, sec.char_end)
+      section_id IN (?, ?) OR (char_start >= ? AND char_end <= ? AND (section_id IS NULL OR section_id='')))`).all(storyId, sec.id, legacySectionId(sec.id), sec.char_start, sec.char_end)
     for (const r of rows) facts.set(r.fact_id, null)
   }
   const pending = db.prepare("SELECT fact_id FROM story_fact WHERE story_id=? AND (role='update' AND (section_id IS NULL OR section_id=''))").all(storyId)
@@ -55,8 +60,8 @@ export async function consolidateSections ({ db, storyId, params = {} }) {
   const parts = segs.map(s => {
     let text = String(s.text || '')
     const leak = new Set((s.facts || []).filter(id => valid.has(id)))
-    text = text.replace(/[（(]\s*(F\d{5}(?:\s*[、,，]\s*F\d{5})*)\s*[）)]/g, (m, ids) => { ids.split(/[、,，]/).forEach(id => { if (valid.has(id.trim())) leak.add(id.trim()) }); return '' })
-    text = text.replace(/\bF\d{5}\b/g, (m) => { if (valid.has(m)) leak.add(m); return '' })
+    text = text.replace(/[（(]\s*(F\d{5,}(?:\s*[、,，]\s*F\d{5,})*)\s*[）)]/g, (m, ids) => { ids.split(/[、,，]/).forEach(id => { if (valid.has(id.trim())) leak.add(id.trim()) }); return '' })
+    text = text.replace(/\bF\d{5,}\b/g, (m) => { if (valid.has(m)) leak.add(m); return '' })
     return { text: text.trim(), facts: [...leak] }
   }).filter(s => s.text.length > 8)
   if (!parts.length) return { error: 'empty-merged' }
@@ -70,12 +75,12 @@ export async function consolidateSections ({ db, storyId, params = {} }) {
   const pushSection = (heading, md, anchorList) => {
     const start = body.length
     body += `## ${heading}\n\n${md}\n\n`
-    outSections.push({ id: `${storyId}:sec${outSections.length + 1}`, heading, body_md: md, char_start: start, char_end: body.length })
+    outSections.push({ id: sectionId(storyId, outSections.length + 1), heading, body_md: md, char_start: start, char_end: body.length })
     if (anchorList) for (const a of anchorList) anchors.push({ ...a, sectionIdx: outSections.length - 1 })
   }
   for (const sec of keepList) {
     const oldAnchors = db.prepare(`SELECT fact_id,char_start,char_end FROM story_fact WHERE story_id=? AND (
-      section_id=? OR (char_start >= ? AND char_end <= ? AND (section_id IS NULL OR section_id='')))`).all(storyId, sec.id, sec.char_start, sec.char_end)
+      section_id IN (?, ?) OR (char_start >= ? AND char_end <= ? AND (section_id IS NULL OR section_id='')))`).all(storyId, sec.id, legacySectionId(sec.id), sec.char_start, sec.char_end)
     pushSection(sec.heading, sec.body_md, oldAnchors.map(a => ({ fid: a.fact_id, relA: a.char_start - sec.char_start, relB: a.char_end - sec.char_start })))
   }
   // 合并节
@@ -88,7 +93,7 @@ export async function consolidateSections ({ db, storyId, params = {} }) {
     for (const fid of new Set(part.facts)) mergedAnchors.push({ fid, a, b })
     body += '\n\n'
   }
-  outSections.push({ id: `${storyId}:sec${outSections.length + 1}`, heading: '最新进展', body_md: mergedMd, char_start: mergedStart, char_end: body.length })
+  outSections.push({ id: sectionId(storyId, outSections.length + 1), heading: '最新进展', body_md: mergedMd, char_start: mergedStart, char_end: body.length })
 
   // 闸门
   const used = new Set(mergedAnchors.map(a => a.fid))
@@ -100,7 +105,7 @@ export async function consolidateSections ({ db, storyId, params = {} }) {
   }
 
   // 写回：重建 sections 与 anchors（含保留节的偏移迁移）
-  db.exec('BEGIN')
+  db.exec('BEGIN IMMEDIATE')
   try {
     db.prepare('UPDATE story SET body_md=?, last_update_ts=? WHERE id=?').run(body, Math.floor(Date.now() / 1000), storyId)
     db.prepare('DELETE FROM story_section WHERE story_id=?').run(storyId)
@@ -113,7 +118,6 @@ export async function consolidateSections ({ db, storyId, params = {} }) {
     for (const a of anchors) {
       const sec = keptSecs[a.sectionIdx]
       if (!sec) continue
-      const base = sec.char_start + 3 // "## " + heading + "\n\n" 的偏移在 rel 中已含标题
       insSf.run(storyId, a.fid, sec.id, sec.char_start + a.relA, sec.char_start + a.relB, 'asserts', order++)
     }
     // 合并节锚点

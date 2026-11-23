@@ -2,6 +2,7 @@
 import { writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { openDb, ROOT } from '../shared/db.mjs'
+import { outFile } from '../shared/config.mjs'
 
 const db = openDb()
 const stories = db.prepare(`SELECT id,title,body_md,item_count,category,status FROM story WHERE body_md IS NOT NULL AND body_md != ''`).all()
@@ -43,6 +44,6 @@ const out = {
   related_pairs: related.length,
   max_pairs: pairs.length
 }
-writeFileSync(path.join(ROOT, 'out', 'story-link-audit.json'), JSON.stringify({ ...out, duplicate_pairs_detail: dupes, related_pairs_detail: related }, null, 1))
+writeFileSync(outFile('story-link-audit.json'), JSON.stringify({ ...out, duplicate_pairs_detail: dupes, related_pairs_detail: related }, null, 1))
 console.log(JSON.stringify(out, null, 1))
 db.close()
