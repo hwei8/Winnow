@@ -1,0 +1,191 @@
+{
+  "feeds": [
+    {
+      "sourceId": "src:36kr-full",
+      "name": "36氪",
+      "tier": 2,
+      "lang": "zh",
+      "topic": "科技商业",
+      "full": true,
+      "urls": [
+        "https://www.36kr.com/feed"
+      ]
+    },
+    {
+      "sourceId": "src:tmtpost",
+      "name": "钛媒体",
+      "tier": 2,
+      "lang": "zh",
+      "topic": "科技商业",
+      "full": true,
+      "urls": [
+        "https://www.tmtpost.com/rss"
+      ]
+    },
+    {
+      "sourceId": "src:leiphone",
+      "name": "雷锋网",
+      "tier": 2,
+      "lang": "zh",
+      "topic": "AI/科技",
+      "full": true,
+      "urls": [
+        "https://www.leiphone.com/feed"
+      ]
+    },
+    {
+      "sourceId": "src:ifanr",
+      "name": "爱范儿",
+      "tier": 2,
+      "lang": "zh",
+      "topic": "消费科技",
+      "full": true,
+      "urls": [
+        "https://www.ifanr.com/feed"
+      ]
+    },
+    {
+      "sourceId": "src:geekpark",
+      "name": "极客公园",
+      "tier": 2,
+      "lang": "zh",
+      "topic": "科技商业",
+      "full": true,
+      "urls": [
+        "https://www.geekpark.net/rss"
+      ]
+    },
+    {
+      "sourceId": "src:verge",
+      "name": "The Verge",
+      "tier": 1,
+      "lang": "en",
+      "topic": "消费科技",
+      "full": true,
+      "urls": [
+        "https://www.theverge.com/rss/index.xml"
+      ]
+    },
+    {
+      "sourceId": "src:arstechnica",
+      "name": "Ars Technica",
+      "tier": 1,
+      "lang": "en",
+      "topic": "科技深度",
+      "full": true,
+      "urls": [
+        "https://arstechnica.com/feed/"
+      ]
+    },
+    {
+      "sourceId": "src:nvidia-blog",
+      "name": "NVIDIA Blog",
+      "tier": 1,
+      "lang": "en",
+      "topic": "AI 芯片",
+      "full": true,
+      "urls": [
+        "https://blogs.nvidia.com/feed/"
+      ]
+    },
+    {
+      "sourceId": "src:cloudflare-blog",
+      "name": "Cloudflare Blog",
+      "tier": 1,
+      "lang": "en",
+      "topic": "基础设施",
+      "full": true,
+      "urls": [
+        "https://blog.cloudflare.com/rss/"
+      ]
+    },
+    {
+      "sourceId": "src:semianalysis",
+      "name": "SemiAnalysis",
+      "tier": 1,
+      "lang": "en",
+      "topic": "芯片/算力",
+      "full": true,
+      "urls": [
+        "https://www.semianalysis.com/feed"
+      ]
+    },
+    {
+      "sourceId": "src:hn-rss",
+      "name": "Hacker News",
+      "tier": 1,
+      "lang": "en",
+      "topic": "技术社区",
+      "full": false,
+      "urls": [
+        "https://hnrss.org/frontpage"
+      ]
+    },
+    {
+      "sourceId": "src:lobsters",
+      "name": "Lobsters",
+      "tier": 2,
+      "lang": "en",
+      "topic": "技术社区",
+      "full": false,
+      "urls": [
+        "https://lobste.rs/rss"
+      ]
+    },
+    {
+      "sourceId": "src:techcrunch",
+      "name": "TechCrunch",
+      "tier": 1,
+      "lang": "en",
+      "topic": "创投",
+      "full": false,
+      "urls": [
+        "https://techcrunch.com/feed/"
+      ]
+    },
+    {
+      "sourceId": "src:openai-news",
+      "name": "OpenAI News",
+      "tier": 1,
+      "lang": "en",
+      "topic": "AI 官方",
+      "full": false,
+      "urls": [
+        "https://openai.com/news/rss.xml"
+      ]
+    },
+    {
+      "sourceId": "src:hf-blog",
+      "name": "HuggingFace Blog",
+      "tier": 1,
+      "lang": "en",
+      "topic": "AI 官方",
+      "full": false,
+      "urls": [
+        "https://huggingface.co/blog/feed.xml"
+      ]
+    },
+    {
+      "sourceId": "src:sspai",
+      "name": "少数派",
+      "tier": 2,
+      "lang": "zh",
+      "topic": "效率工具",
+      "full": false,
+      "urls": [
+        "https://sspai.com/feed"
+      ]
+    },
+    {
+      "sourceId": "src:nyt-tech",
+      "name": "NYT Technology",
+      "tier": 1,
+      "lang": "en",
+      "topic": "科技",
+      "full": false,
+      "urls": [
+        "https://rss.nytimes.com/services/xml/rss/nyt/Technology.xml"
+      ]
+    }
+  ]
+}

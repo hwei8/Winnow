@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="dark" />
+  <title>{{TITLE}}</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body data-page="{{PAGE}}">
+  <header class="topbar">{{HEADER}}</header>
+  <main class="wrap" id="main">{{MAIN}}</main>
+
+  <div class="lightbox" id="lightbox" hidden>
+    <button class="lb-close" type="button" aria-label="关闭">×</button>
+    <img id="lb-img" alt="证据截图" />
+    <div class="lb-cap" id="lb-cap"></div>
+  </div>
+
+  <aside class="drawer" id="drawer" hidden>
+    <div class="drawer-inner" id="drawer-inner"></div>
+  </aside>
+
+  <div class="toast" id="toast" hidden></div>
+
+  <script type="application/json" id="boot">{{BOOT}}</script>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

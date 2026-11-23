@@ -1,0 +1,161 @@
+# 运维
+
+## 要求
+
+| 项 | 要求 |
+|---|---|
+| Node | ≥ 22.5（依赖 `node:sqlite`；本项目在 v24 上开发） |
+| 磁盘 | 库 ~70MB / 1k 篇 Story；`out/` 会持续增长（可定期清理） |
+| 网络 | 出站 HTTPS（LLM / embedding / 搜索 / RSS） |
+| 依赖 | `sqlite-vec`（唯一 npm 依赖，提供向量检索的 SQLite 扩展） |
+
+单机、单进程、一个 SQLite 文件。不需要 Docker、不需要数据库服务。
+
+## 配置
+
+所有配置走环境变量，或根目录 `.env`（自动加载，不覆盖已有 env）。
+
+| 变量 | 必填 | 说明 |
+|---|---|---|
+| `OPENCODE_GO_API_KEY` | ✅ | chat 模型（抽取 / 成稿 / 简报） |
+| `OPENROUTER_API_KEY` | ✅ | embedding（`baai/bge-m3`，1024 维） |
+| `ZEN_API_KEY` | ✅ | Jev 判定（免费通道优先，失败自动走 OpenRouter） |
+| `DEEPSEEK_SEARCH_TOKEN` | 可选 | 搜索发现 + 正文抓取兜底 |
+| `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` | 可选 | 简报推送 |
+| `IM_DB` | 可选 | 数据库路径（默认 `data/p0.db`） |
+| `IM_DATA_DIR` / `IM_OUT_DIR` | 可选 | 数据 / 产物目录 |
+| `HOST` / `PORT` | 可选 | Web 监听（默认 `0.0.0.0:3083`） |
+| `EMBED_PROVIDER` | 可选 | `openrouter`（默认）/ `local` |
+| `FETCH_FALLBACK=0` | 可选 | 关闭搜索 API 正文兜底 |
+
+### 密钥的三种放法
+
+1. `.env`（最简单，已在 `.gitignore`）；
+2. `.secrets/<name>`（`ZEN_API_KEY` → `.secrets/zen.key`）；
+3. 复用 DSH 凭据文件：`IM_CREDENTIALS_FILE=/path/.credentials.yaml`。
+
+代码里**没有**默认 key、默认主机名、默认用户目录。
+
+## 部署
+
+### 最小形态（systemd）
+
+`/etc/systemd/system/im-base-web.service`：
+
+```ini
+[Unit]
+Description=im-base web
+After=network-online.target
+
+[Service]
+Type=simple
+User=im
+WorkingDirectory=/srv/im-base
+EnvironmentFile=/srv/im-base/.env
+ExecStart=/usr/bin/node src/web/server.mjs
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+```
+
+`/etc/systemd/system/im-base-daily.service` + `.timer`：
+
+```ini
+# im-base-daily.service
+[Service]
+Type=oneshot
+User=im
+WorkingDirectory=/srv/im-base
+EnvironmentFile=/srv/im-base/.env
+ExecStart=/usr/bin/node src/cli/daemon.mjs --once --send
+```
+
+```ini
+# im-base-daily.timer
+[Unit]
+Description=im-base daily run
+
+[Timer]
+OnCalendar=*-*-* 08:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+```
+
+```bash
+systemctl enable --now im-base-web.service im-base-daily.timer
+journalctl -u im-base-daily -f
+```
+
+### 单写者
+
+SQLite 单写者。同时跑两个写入进程（例如 daemon + 手工 pipeline）会互相等锁，极端情况下报 `SQLITE_BUSY`。约定：
+
+- 定时任务只有一个（timer 或 `daemon --loop`，不要都开）；
+- Web 的写入是短事务，可并发；
+- 批量脚本跑之前停掉 timer。
+
+`daemon.mjs` 自身用 `out/daemon.lock` 防重入。
+
+### 公网访问
+
+Web **没有登录**。要外网访问，放在 Cloudflare Tunnel 或带认证的反向代理后面，别直接暴露端口。
+
+## 备份与恢复
+
+```bash
+npm run db:backup           # VACUUM INTO out/backup/p0-<时间>.db（一致性快照，无需停服）
+```
+
+恢复：
+
+```bash
+systemctl stop im-base-web
+cp out/backup/p0-20261122T090000.db data/p0.db
+rm -f data/p0.db-wal data/p0.db-shm
+systemctl start im-base-web
+```
+
+建议 cron 每天一次 + 保留 14 天：
+
+```bash
+0 3 * * * cd /srv/im-base && npm run db:backup && find out/backup -name 'p0-*.db' -mtime +14 -delete
+```
+
+## 监控
+
+| 检查 | 命令 | 期望 |
+|---|---|---|
+| 依赖健康 | `npm run health` | 4/4 ok（db / embed / jev / telegram） |
+| 降级演练 | `node src/cli/drill.mjs` | 3/3（模拟依赖挂掉时能兜底） |
+| 采集健康 | `node src/cli/collect.mjs --health` | 无连续失败 |
+| 系统度量 | `npm run metrics` | 追平率、冗余率、QA 均分趋势 |
+| 队列积压 | `node src/cli/db.mjs --stats` | `ingest_queue` 的 pending 不应长期 > 50 |
+
+日志：Web 打到 stdout（systemd 收集）；`daemon.mjs` 写 `out/daemon.log`；每次流水线写 `out/reports/daily-*.md`。
+
+## 排错
+
+| 现象 | 常见原因 | 处理 |
+|---|---|---|
+| `SQLITE_BUSY` | 多个写入进程 | 停掉重复的定时任务；`PRAGMA busy_timeout` 已设 4s |
+| 抽取全是 `unverified` | 正文抓取只拿到摘要 | 检查 `content_source`；启 `DEEPSEEK_SEARCH_TOKEN` 兜底 |
+| 新条目 `too-short` | 站点反爬 / 需要 JS | 换 feed、或用搜索 API fetch；必要时给该源加专用 adapter |
+| Jev 报 429 | 免费通道限流 | 自动切 OpenRouter；`JEV_FALLBACK=0` 会关闭兜底 |
+| embedding 全挂 | key 或额度 | `npm run health` 看 `embed-*`；切 `EMBED_PROVIDER=local` |
+| 简报为空 | 窗口内没有更新 | `npm run brief -- --hours=72` 验证；检查 `story_update` 是否在写 |
+| Web 500 | 查询层改动 | `node --test tests/web-queries.test.mjs`；看 stdout 的 `[error]` 行 |
+| 同一篇被建了两次 | 链接判定阈值偏松 | 看 `ingest_decision`；用 `link-audit` 找可合并对 |
+
+## 成本控制
+
+`token_ledger` 记录每次调用的 token 与成本，`/audit` 有 Token 账本面板。三个阀门：
+
+1. `pipeline` 的 `--limit`（每天采多少）；
+2. 抽取的 15 条上限（每篇的固定成本）；
+3. 重写策略（P4 不写、P2 先合并）——这是最大的省钱项。
+
+按每天 30 篇新 Story：≈0.4M tokens/天，个人预算内几乎无感。真正的瓶颈是正文抓取成功率。

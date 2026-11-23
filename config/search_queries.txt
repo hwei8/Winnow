@@ -1,0 +1,39 @@
+# 搜索型发现配置（DeepSeek 官方搜索 API，复用 DSH 账号）
+#
+# 语法（对齐 TrendRadar 的 search_queries）：
+#   [主题名]        段落第一行，给这组搜索起名
+#   !排除词         标题/摘要含该词的结果丢弃
+#   -site:域名      屏蔽站点（全局区可用）
+#   site:域名       只看该站点
+#   @数字           本主题最多入库几条
+#   ~数字d          只看最近 N 天（~0d = 不限）
+#   @provider:名称  预留给多引擎，目前只支持 deepseek
+#
+# 空行分隔主题。行内不带指令的文字都是搜索词。
+
+[GLOBAL_FILTER]
+!招聘
+!广告
+-site:baijiahao.baidu.com
+-site:zhihu.com/question
+
+[SEARCH_TOPICS]
+
+[英伟达与AI芯片]
+英伟达 黄仁勋 最新消息
+Nvidia AI chip latest news
+英伟达 财报 数据中心 营收
+@6
+~7d
+
+[大模型进展]
+大模型 发布 开源 最新
+OpenAI Anthropic Google 模型 更新
+@6
+~7d
+
+[AI Agent 与编程]
+AI agent 产品 发布
+AI coding assistant release
+@4
+~14d

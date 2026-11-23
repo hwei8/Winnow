@@ -1,0 +1,39 @@
+name: Bug 报告
+description: 报告一个可复现的问题
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: 请勿粘贴密钥、完整 .env 或含隐私的正文。
+  - type: textarea
+    id: what
+    attributes:
+      label: 发生了什么
+      description: 期望 vs 实际
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: 复现步骤
+      description: 命令、URL 类型、数据量
+      placeholder: |
+        npm run pipeline -- --urls=...
+        → 期望 X，实际 Y
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: 版本 / 提交
+  - type: dropdown
+    id: area
+    attributes:
+      label: 相关模块
+      options: [ingest, knowledge, story, memory, brief, web, cli, providers, 不确定]
+  - type: textarea
+    id: logs
+    attributes:
+      label: 日志
+      description: out/daemon.log、out/reports/daily-*.md、控制台错误（注意脱敏）
+      render: shell
