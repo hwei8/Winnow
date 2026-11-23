@@ -1,6 +1,7 @@
 // ingest/store.mjs — 条目入库（fetch → 正文抽取 → item/item_block 落库），供 adapter 与 pipeline 共用
 import { createHash } from 'node:crypto'
 import { extractMainText } from './extract.mjs'
+import { isLatexNoise } from './tex.mjs'
 import { blockText } from './feed.mjs'
 import { safeFetchText } from '../../shared/net.mjs'
 
@@ -48,7 +49,7 @@ export async function ingestUrl (db, url, { sourceId = 'src:pipeline', titleHint
   const itemId = itemIdFor(sourceId, url)
   const existing = db.prepare('SELECT id,title FROM item WHERE id=?').get(itemId)
   if (existing) {
-    const blocks = db.prepare('SELECT text FROM item_block WHERE item_id=? ORDER BY idx').all(itemId).map(r => r.text)
+    const blocks = db.prepare("SELECT text FROM item_block WHERE item_id=? AND kind != 'noise' ORDER BY idx").all(itemId).map(r => r.text)
     const text = blockText(blocks)
     if (blocks.length && text.length > 200) return { itemId, title: existing.title, text, blocks, reused: true }
   }
@@ -63,6 +64,24 @@ export async function ingestUrl (db, url, { sourceId = 'src:pipeline', titleHint
 export function loadItem (db, itemId) {
   const row = db.prepare('SELECT id,title,url FROM item WHERE id=?').get(itemId)
   if (!row) return null
-  const blocks = db.prepare('SELECT text FROM item_block WHERE item_id=? ORDER BY idx').all(itemId).map(r => r.text)
+  const blocks = db.prepare("SELECT text FROM item_block WHERE item_id=? AND kind != 'noise' ORDER BY idx").all(itemId).map(r => r.text)
   return { itemId, title: row.title, url: row.url, blocks, text: blockText(blocks) }
+}
+
+/** 把历史数据里已经是 LaTeX 宏定义的块标成 kind='noise'（不删行：claim 证据偏移依赖块文本） */
+export function markNoiseBlocks (db) {
+  const rows = db.prepare("SELECT item_id, idx, text FROM item_block WHERE COALESCE(kind,'') != 'noise'").all()
+  const upd = db.prepare('UPDATE item_block SET kind=? WHERE item_id=? AND idx=?')
+  const touched = new Set()
+  let marked = 0
+  for (const r of rows) {
+    if (!isLatexNoise(r.text)) continue
+    upd.run('noise', r.item_id, r.idx)
+    touched.add(r.item_id)
+    marked++
+  }
+  const sumStmt = db.prepare("SELECT COALESCE(SUM(length(text)),0) n FROM item_block WHERE item_id=? AND kind != 'noise'")
+  const setCount = db.prepare('UPDATE item SET char_count=? WHERE id=?')
+  for (const id of touched) setCount.run(sumStmt.get(id).n, id)
+  return marked
 }

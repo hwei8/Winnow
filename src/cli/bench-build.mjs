@@ -45,7 +45,7 @@ function loadStoryVectors () {
 }
 
 async function itemText (db, itemId) {
-  const blocks = db.prepare('SELECT text FROM item_block WHERE item_id=? ORDER BY idx').all(itemId)
+  const blocks = db.prepare("SELECT text FROM item_block WHERE item_id=? AND kind != 'noise' ORDER BY idx").all(itemId)
   return blocks.map((b) => b.text).join('\n\n')
 }
 

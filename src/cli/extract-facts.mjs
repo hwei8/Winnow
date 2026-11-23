@@ -12,7 +12,7 @@ const items = db.prepare(`SELECT DISTINCT i.id, i.title FROM story s JOIN story_
   WHERE (s.body_md IS NULL OR s.body_md='') AND NOT EXISTS (SELECT 1 FROM claim c WHERE c.item_id=i.id)`).all()
   .filter(it => db.prepare('SELECT COUNT(*) c FROM item_block WHERE item_id=?').get(it.id).c > 0)
 console.log('items to extract:', items.length)
-const blocksOf = db.prepare('SELECT text FROM item_block WHERE item_id=? ORDER BY idx')
+const blocksOf = db.prepare("SELECT text FROM item_block WHERE item_id=? AND kind != 'noise' ORDER BY idx")
 const insClaim = db.prepare(`INSERT OR REPLACE INTO claim(id,story_id,item_id,text,kind,subject,predicate,object_text,confidence,extractor,created_at,object_value_json,is_meta,status,asserted_at,source_tier) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
 const insEv = db.prepare(`INSERT OR REPLACE INTO claim_evidence(claim_id,item_id,stance,segment_from,segment_to,time_start,time_end,frame_id,excerpt,verified) VALUES (?,?,?,?,?,?,?,?,?,?)`)
 const run = await runPool(items.map(it => async () => {

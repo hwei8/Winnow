@@ -12,6 +12,7 @@ import { freshDb, openDb } from '../shared/db.mjs'
 import { SCHEMA_VERSION } from '../shared/schema.mjs'
 import { repairSectionIds } from '../domains/story/store.mjs'
 import { requeueStale } from '../domains/ingest/queue.mjs'
+import { markNoiseBlocks } from '../domains/ingest/store.mjs'
 
 const has = (flag) => process.argv.includes(flag)
 const stamp = () => new Date().toISOString().replace(/[-:]/g, '').slice(0, 15)
@@ -57,7 +58,9 @@ if (has('--init')) {
       // generate-stories 早期把 story_fact.section_id 写成裸 `secN`，consolidate 会因此丢锚点
       section_ids_fixed: repairSectionIds(db),
       // worker 崩溃后卡在 running 的入库任务放回队列
-      queue_requeued: requeueStale(db)
+      queue_requeued: requeueStale(db),
+      // 历史数据里被当成正文的 LaTeX 宏定义块（不删行，只改 kind）
+      noise_blocks: markNoiseBlocks(db)
     }
     db.exec('COMMIT')
   } catch (e) { db.exec('ROLLBACK'); throw e }

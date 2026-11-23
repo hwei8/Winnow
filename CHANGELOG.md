@@ -1,3 +1,7 @@
+## Unreleased
+
+- 抽取阶段丢弃 LaTeX 宏定义/公式块（`\newcommand`、`%` 注释行、花括号密度 >12%），`db:repair` 把历史数据里这类块标成 `kind='noise'` 并从所有读取路径排除（23 块、2 个条目）；`item.char_count` 同步重算。
+
 ## 0.4.0 — Phase 1：测量基座
 
 - **打分原语抽成一处**：`domains/knowledge/score.mjs`（`scorePair` / `applyAffinityOverride` / `SAME_EVENT_QUESTION`），`linkIncoming()` 与 bench 调同一段代码——以前 bench 只能另写一份，量出来的不是线上跑的东西。

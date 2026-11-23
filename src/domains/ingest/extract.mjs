@@ -2,6 +2,7 @@
 // 策略：剔除噪声标签与噪声 class/id → 选 <article> 或"段落文本最多"的容器 → 取块
 
 import { elements, replaceElements, stripTags, tagSet, tagPrefix, wordTag, KEEP } from './html.mjs'
+import { isLatexNoise } from './tex.mjs'
 
 // 输入上限：再大的网页正文也不会超过这个量级，截断可以把最坏情况封顶
 const MAX_HTML = 3 * 1024 * 1024
@@ -62,6 +63,7 @@ const NAV_KW = /(Menu|Subscribe|Sign in|Sign up|Log in|Watchlist|Cookies|Privacy
 
 function blockOk (t) {
   if (t.length < 80 || t.length > 2500) return false
+  if (isLatexNoise(t)) return false
   if (NAV_KW.test(t)) return false
   if ((t.match(/\|/g) || []).length >= 2) return false
   const punct = (t.match(/[。.!?！？；;:：]/g) || []).length
