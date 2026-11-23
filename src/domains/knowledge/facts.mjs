@@ -7,6 +7,7 @@
 //   * fact 编号在 BEGIN IMMEDIATE 事务里分配：并发写进程不会撞主键。
 import { decide } from '../../providers/jev.mjs'
 import { embedBatch } from '../../providers/embed.mjs'
+import { th } from '../../shared/thresholds.mjs'
 
 export async function embedTexts (texts) { return embedBatch(texts) }
 
@@ -14,9 +15,9 @@ export const cos = (a, b) => { let s = 0; const n = Math.min(a.length, b.length)
 export const toVec = (buf) => new Float32Array(buf.buffer, buf.byteOffset, buf.byteLength / 4)
 const toBlob = (vec) => Buffer.from(new Float32Array(vec).buffer)
 
-const RECALL_TH = 0.55 // 召回候选的最低余弦
-const SAME_TH = 0.6 // Jev noul ≥ 此值视为同一事实
-const NEAR_DUP_TH = 0.92 // 同批新建事实之间：余弦极高直接视为同一事实（无 Jev 判定）
+const RECALL_TH = 0.55 // 默认值；以 config/thresholds.json 的 facts.recall_th 为准
+const SAME_TH = 0.6 // 默认值；以 facts.same_th 为准
+const NEAR_DUP_TH = 0.92 // 默认值；以 facts.near_dup_th 为准
 
 /** 下一个 fact 编号（F00001 起，位数随增长自然扩展）。须在写事务内调用。 */
 export function nextFactNumber (db) {
@@ -62,7 +63,7 @@ export async function assignClaimsToFacts (db, claimIds, { decideFn = decide, em
     const batch = claims.slice(i, i + batchSize)
     const cands = batch.map(c => ({
       c,
-      top: factReps.map(f => ({ f, cos: cos(c.vec, f.vec) })).sort((a, b) => b.cos - a.cos).slice(0, 3).filter(x => x.cos >= RECALL_TH)
+      top: factReps.map(f => ({ f, cos: cos(c.vec, f.vec) })).sort((a, b) => b.cos - a.cos).slice(0, 3).filter(x => x.cos >= th('facts.recall_th', RECALL_TH))
     }))
     const state = { pairs: [] }
     const questions = {}
@@ -81,11 +82,11 @@ export async function assignClaimsToFacts (db, claimIds, { decideFn = decide, em
       let nextNum = nextFactNumber(db)
       cands.forEach(({ c, top }, k) => {
         let best = null
-        top.forEach((t, j) => { const p = answers[`q${k}_${j}`]?.noul ?? 0; if (p >= SAME_TH && (!best || p > best.p)) best = { id: t.f.id, p } })
+        top.forEach((t, j) => { const p = answers[`q${k}_${j}`]?.noul ?? 0; if (p >= th('facts.same_th', SAME_TH) && (!best || p > best.p)) best = { id: t.f.id, p } })
         if (!best) {
           // 同批刚建的事实不在 Jev 题目里：余弦极高则直接并入
           const twin = createdHere.map(f => ({ f, s: cos(c.vec, f.vec) })).sort((a, b) => b.s - a.s)[0]
-          if (twin && twin.s >= NEAR_DUP_TH) best = { id: twin.f.id }
+          if (twin && twin.s >= th('facts.near_dup_th', NEAR_DUP_TH)) best = { id: twin.f.id }
         }
         if (best) {
           insFC.run(best.id, c.id, 'supports', now); updC.run(best.id, c.id); bump.run(now, best.id); assigned++

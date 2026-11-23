@@ -1,0 +1,45 @@
+{
+  "_note": "线上阈值 + provenance。运行时读这里的数字；bench 可以回写（--promote），被回写的条目必须带 provenance（数据集、样本量、正例、硬负、报告路径、时间）。",
+  "link": {
+    "candidate_cos_min": 0.55,
+    "same_event_min": 0.7,
+    "affinity_min": 0.72,
+    "affinity_ratio_min": 0.4,
+    "provenance": {
+      "state": "uncalibrated",
+      "why": "0.55 / 0.70 是凭经验定的，没有标注集支撑；Phase 2 用 bench/link.v1.jsonl 重新定。",
+      "at": "2026-11-23"
+    }
+  },
+  "facts": {
+    "recall_th": 0.55,
+    "same_th": 0.6,
+    "near_dup_th": 0.92,
+    "gap_cos": 0.85,
+    "provenance": {
+      "state": "uncalibrated",
+      "why": "同上；Phase 4 用硬负样本基准重定。",
+      "at": "2026-11-23"
+    }
+  },
+  "policy": {
+    "p0_conflict_min": 0.6,
+    "p1_lede_drift_min": 0.55,
+    "title_overlap_min": 0.45,
+    "provenance": {
+      "state": "uncalibrated",
+      "why": "在 3–10 个样本上调出来的；Phase 6 用 120–150 条真实 pending update 标定。",
+      "at": "2026-11-23"
+    }
+  },
+  "rewrite": {
+    "targeted_coverage_min": 0.85,
+    "full_coverage_min": 0.9,
+    "dup_max": 0.2,
+    "provenance": {
+      "state": "uncalibrated",
+      "why": "门禁度量本身有问题（写手自标签），Phase 3 换成独立支撑校验。",
+      "at": "2026-11-23"
+    }
+  }
+}

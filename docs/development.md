@@ -90,6 +90,24 @@ npm test -- tests/feed.test.mjs
 
 涉及网络的测试（LLM / Jev / 搜索）**不进 CI**——用 `drill.mjs` 在本地演练降级。
 
+## 阈值与标注（bench）
+
+阈值不写在代码里，写在 `config/thresholds.json`，每条都带 provenance（数据集、样本量、正例、
+硬负、报告路径、时间）。运行时统一用 `th('link.same_event_min', 0.7)` 读取，缺字段回落默认值。
+
+改一个判定阈值的最小闭环：
+
+```bash
+npm run bench:build -- --task=link --n=125   # 采样（同 seed 可复现）
+npm run label -- --task=link                 # 盲标，约 5–10 秒一条
+npm run bench -- --task=link                 # 打分 + 报告，看硬负 FPR 与推荐阈值
+npm run bench -- --task=link --promote=final # 写回 thresholds.json（自带 provenance）
+```
+
+新判定逻辑（比如 Phase 2 的时间窗、同一语言比较）必须先在 `bench/` 上跑出数字，再改线上阈值；
+反过来（先调阈值、再找理由）就是这里最想避免的做法。指标函数都是纯函数，见
+`src/domains/bench/metrics.mjs` 与 `tests/bench.test.mjs`。
+
 ## 调试技巧
 
 ```bash

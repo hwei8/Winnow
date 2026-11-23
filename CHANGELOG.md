@@ -1,3 +1,13 @@
+## 0.4.0 — Phase 1：测量基座
+
+- **打分原语抽成一处**：`domains/knowledge/score.mjs`（`scorePair` / `applyAffinityOverride` / `SAME_EVENT_QUESTION`），`linkIncoming()` 与 bench 调同一段代码——以前 bench 只能另写一份，量出来的不是线上跑的东西。
+- **阈值集中在 `config/thresholds.json`**，每条带 provenance（state / why / at；bench 回写时附数据集、样本量、正例、硬负、报告路径）。运行时用 `th('link.same_event_min', 0.7)` 读取，缺字段回落默认值，阈值不再是启动依赖。
+- **标注集** `bench/link.v1.jsonl`：250 对「入站条目 × 已有 Story」，分层采样（最接近余弦 0.65 的候选 + 最高分候选），同 seed 可复现；`npm run bench:build` 重新采样。
+- **交互标注器** `src/cli/label.mjs`：y/n/u/s/h/q 单键、逐条落盘、可续标、默认不显示模型分数（盲标，`label_meta.blind` 记录）。
+- **bench 报告** `src/cli/bench.mjs`：阈值扫描（P/R/F1 + 硬负 FPR 与 Wilson 区间）、可靠性分箱与 ECE、带约束的推荐阈值（precision ≥ 0.90 且硬负 FPR ≤ 0.15），`--promote` 回写 `thresholds.json`。
+- 指标纯函数 `domains/bench/metrics.mjs`（confusion / wilson / hardNegativeFpr / reliability / ece / grid / sweep / pickThreshold），单测 12 条。
+- 测试 61 → 73；新增 `tests/bench.test.mjs`、`tests/score.test.mjs`。
+
 ## 0.3.0 — Phase 0：正确性与账单诚实
 
 - **链接判定默认改走 OpenRouter 1.14**（`JEV_PROVIDER` 可回退 zen）。同一份基准上 same_event 最优 F1 0.757@0.4 vs Zen 免费档 0.696@0.4，代价约 $0.2/月。

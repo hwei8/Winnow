@@ -150,6 +150,9 @@ npm run brief -- --send
 | `npm run worker` | 消费入库队列（Web「一键入库」与 `discover --enqueue` 写入的 URL） |
 | `npm run db:stats` / `db:backup` / `db:repair` | 库概览 / 一致性快照 / 幂等数据修复（先自动备份） |
 | `npm test` / `npm run check` | 单元 + 集成测试（无需真实 key）/ 语法 + import + 脚本路径静态检查 |
+| `npm run bench:build -- --task=link` | 从线上库采样造标注集（`bench/link.v1.jsonl`） |
+| `npm run label -- --task=link` | 交互标注：同一事件 y/n/u、硬负例 h，随时退出随时续 |
+| `npm run bench -- --task=link` | 扫阈值、算 P/R/F1、硬负 FPR、可靠性曲线，出报告 |
 
 每个 CLI 的用法写在文件头部注释里（`src/cli/*.mjs`），常用入口在 `package.json` 的 `scripts` 中。
 

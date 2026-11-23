@@ -7,6 +7,7 @@
 import { execFileSync } from 'node:child_process'
 import { writeFileSync, mkdirSync } from 'node:fs'
 import path from 'node:path'
+import { provenanceOf } from '../shared/thresholds.mjs'
 import { openDb, ROOT, nowIso } from '../shared/db.mjs'
 import { outFile, localDate } from '../shared/config.mjs'
 
@@ -132,6 +133,10 @@ const low = db.prepare(`SELECT q.story_id, q.score, q.coverage, q.dup_rate, s.ti
   WHERE q.score < 70 AND s.status != 'duplicate' AND s.story_kind != 'snippet' ORDER BY q.score ASC LIMIT 8`).all()
 const anomalies = db.prepare(`SELECT COUNT(*) c FROM story_qa WHERE coverage > 1 OR coverage < 0.2`).get().c
 // 卡住的流水线项与关键事实的单源份额：报告里必须有，否则"延期/拆分"永远静默
+// 阈值状态进报告：未标定的阈值每天在报告里露一次脸，免得它悄悄变成"事实"
+const thState = ['link', 'facts', 'policy', 'rewrite']
+  .map((k) => `${k}=${provenanceOf(k).state || 'unknown'}`)
+  .join('｜')
 const deferred = db.prepare("SELECT COUNT(*) c FROM ingest_decision WHERE action='deferred'").get().c
 const splitPending = db.prepare("SELECT COUNT(*) c FROM story_update WHERE action='split_pending'").get().c
 const factSources = db.prepare('SELECT COUNT(*) c FROM fact WHERE source_count >= 2').get().c
@@ -163,6 +168,7 @@ ${severities.length ? severities.map(s => `- ${s.severity}/${s.action}: ${s.n}`)
 - 事实：${totals.facts}（其中被 ≥2 个独立源证实：${factSources}）
 - QA（全部）：${qaAll.c} 篇｜均分 ${qaAll.avg}｜min ${qaAll.mn}｜max ${qaAll.mx}
 - 卡住的判定：延期 ${deferred}｜该拆未拆 ${splitPending}
+- 阈值状态：${thState}
 - QA（活跃）：${qaActive.c} 篇｜均分 **${qaActive.avg}**｜中位 **${medianActive}**｜min ${qaActive.mn}｜max ${qaActive.mx}
 - QA 分布（全部）：${activeDist.map(d => `${d.b}: ${d.n}`).join('｜')}
 - 覆盖率异常（>1 或 <0.2）：${anomalies}

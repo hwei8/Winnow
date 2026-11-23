@@ -22,7 +22,10 @@
     "db:backup": "node src/cli/db.mjs --backup",
     "db:repair": "node src/cli/db.mjs --repair",
     "test": "node --test tests/*.test.mjs",
-    "check": "node tests/check-syntax.mjs"
+    "check": "node tests/check-syntax.mjs",
+    "bench:build": "node src/cli/bench-build.mjs",
+    "label": "node src/cli/label.mjs",
+    "bench": "node src/cli/bench.mjs"
   },
   "repository": {
     "type": "git",

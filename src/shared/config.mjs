@@ -50,6 +50,7 @@ export function envBool (name, fallback = false) {
 export const DATA_DIR = path.resolve(ROOT, envLegacy('WINNOW_DATA_DIR', 'IM_DATA_DIR', 'data'))
 export const OUT_DIR = path.resolve(ROOT, envLegacy('WINNOW_OUT_DIR', 'IM_OUT_DIR', 'out'))
 export const CONFIG_DIR = path.join(ROOT, 'config')
+export const BENCH_DIR = path.join(ROOT, 'bench')
 export const SECRETS_DIR = path.join(ROOT, '.secrets')
 
 // ── 数据库 ──────────────────────────────────────────────────────────────
