@@ -131,6 +131,10 @@ const activeDist = db.prepare(`SELECT CASE WHEN score>=90 THEN '90+' WHEN score>
 const low = db.prepare(`SELECT q.story_id, q.score, q.coverage, q.dup_rate, s.title FROM story_qa q JOIN story s ON s.id=q.story_id
   WHERE q.score < 70 AND s.status != 'duplicate' AND s.story_kind != 'snippet' ORDER BY q.score ASC LIMIT 8`).all()
 const anomalies = db.prepare(`SELECT COUNT(*) c FROM story_qa WHERE coverage > 1 OR coverage < 0.2`).get().c
+// 卡住的流水线项与关键事实的单源份额：报告里必须有，否则"延期/拆分"永远静默
+const deferred = db.prepare("SELECT COUNT(*) c FROM ingest_decision WHERE action='deferred'").get().c
+const splitPending = db.prepare("SELECT COUNT(*) c FROM story_update WHERE action='split_pending'").get().c
+const factSources = db.prepare('SELECT COUNT(*) c FROM fact WHERE source_count >= 2').get().c
 const totals = {
   stories: db.prepare('SELECT COUNT(*) c FROM story').get().c,
   withBody: db.prepare("SELECT COUNT(*) c FROM story WHERE body_md IS NOT NULL AND body_md != ''").get().c,
@@ -156,8 +160,9 @@ ${severities.length ? severities.map(s => `- ${s.severity}/${s.action}: ${s.n}`)
 
 ## 全库状态
 - Story：${totals.stories}（有正文 ${totals.withBody}｜活跃 ${totals.active}｜重复 ${totals.duplicate}｜片段 ${totals.snippet}）
-- 事实：${totals.facts}
+- 事实：${totals.facts}（其中被 ≥2 个独立源证实：${factSources}）
 - QA（全部）：${qaAll.c} 篇｜均分 ${qaAll.avg}｜min ${qaAll.mn}｜max ${qaAll.mx}
+- 卡住的判定：延期 ${deferred}｜该拆未拆 ${splitPending}
 - QA（活跃）：${qaActive.c} 篇｜均分 **${qaActive.avg}**｜中位 **${medianActive}**｜min ${qaActive.mn}｜max ${qaActive.mx}
 - QA 分布（全部）：${activeDist.map(d => `${d.b}: ${d.n}`).join('｜')}
 - 覆盖率异常（>1 或 <0.2）：${anomalies}
