@@ -11,8 +11,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # 22.13 是 node:sqlite 无需 --experimental-sqlite 的最低版本（见 package.json engines）
-        node: ['22.13.0', '22.x', '24.x']
+        # 22.16.0 = package.json engines 的下限：schema 用到 FTS5（trigram），
+        # 22.13.0 内置的 SQLite 没有编译 FTS5（no such module: fts5）。
+        node: ['22.16.0', '22.x', '24.x']
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

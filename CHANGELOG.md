@@ -30,7 +30,7 @@
 
 ### 变更
 - 7 个导入即执行的脚本从 `domains/` 移到 `cli/`：`ingest`、`finalize`、`apply-policy`、`apply-consolidate`、`qa`、`policy-regression`、`realign`
-- 移除未使用的 `sqlite-vec` 依赖；`engines` 改为 `>=22.13.0`
+- 移除未使用的 `sqlite-vec` 依赖；`engines` 改为 `>=22.16.0`（schema 依赖 FTS5；22.13.0 内置 SQLite 没有 FTS5，CI 矩阵含 22.16.0 守住下限）
 - `npm run check` 改为 `tests/check-syntax.mjs`：语法 + 相对 import + 脚本路径解析
 - 测试 19 → 55 个
 

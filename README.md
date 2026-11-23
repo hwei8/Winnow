@@ -7,7 +7,7 @@
 *Personal memory & information filter — turn an endless feed into a handful of stories you can actually read, and remember what you decided to keep.*
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Node](https://img.shields.io/badge/node-%3E%3D22.13-brightgreen)](package.json)
+[![Node](https://img.shields.io/badge/node-%3E%3D22.16-brightgreen)](package.json)
 [![Tests](https://img.shields.io/badge/tests-55%20passing-brightgreen)](tests/)
 
 ---
@@ -100,7 +100,7 @@ src/cli  ─┼─→ src/domains/*  ─→ src/providers/*  ─→ src/shared
 
 ## 快速开始
 
-**要求**：Node ≥ 22.13（用 `node:sqlite`）、一个 OpenAI 兼容的 chat 端点、一个 embedding 端点。
+**要求**：Node ≥ 22.16（用 `node:sqlite`，且需要内置 SQLite 带 FTS5）、一个 OpenAI 兼容的 chat 端点、一个 embedding 端点。
 
 ```bash
 git clone <this-repo> winnow

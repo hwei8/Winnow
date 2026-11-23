@@ -4,7 +4,7 @@
 
 | 项 | 要求 |
 |---|---|
-| Node | ≥ 22.13（`node:sqlite` 从 22.13 起无需 `--experimental-sqlite`；本项目在 v24 上开发） |
+| Node | ≥ 22.16（需要 `node:sqlite` 且内置 SQLite 带 FTS5：22.13.0 没有 FTS5，22.16.0 实测可用；本项目在 v24 上开发） |
 | 磁盘 | 库 ~70MB / 1k 篇 Story；`out/` 会持续增长（可定期清理） |
 | 网络 | 出站 HTTPS（LLM / embedding / 搜索 / RSS） |
 | 依赖 | 无 npm 运行时依赖（只用 Node 内置模块；向量相似度在 JS 里计算） |

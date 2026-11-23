@@ -5,7 +5,7 @@
   "description": "个人记忆与信息过滤系统：把新闻洪流折叠成可读的 Story，记住你想记的东西。",
   "type": "module",
   "engines": {
-    "node": ">=22.13.0"
+    "node": ">=22.16.0"
   },
   "scripts": {
     "web": "node src/web/server.mjs",
