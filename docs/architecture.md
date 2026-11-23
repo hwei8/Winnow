@@ -48,7 +48,7 @@
 
 | 模块 | 职责 | 可替换性 |
 |---|---|---|
-| `llm.mjs` | OpenAI 兼容 chat，重试 / 退避 / 用量记账 | `OPENCODE_GO_API_KEY`、`IM_CREDENTIALS_FILE` |
+| `llm.mjs` | OpenAI 兼容 chat，重试 / 退避 / 用量记账 | `OPENCODE_GO_API_KEY`、`WINNOW_CREDENTIALS_FILE` |
 | `embed.mjs` | 向量化，1024 维 | `EMBED_PROVIDER=openrouter\|local`，失败自动兜底 |
 | `jev.mjs` | 「是否同一事件 / 同一事实」判定（返回 0–1） | Zen 免费通道优先，OpenRouter 兜底 |
 | `search.mjs` | 搜索发现 + 正文抓取兜底 | `DEEPSEEK_SEARCH_TOKEN`，5 QPS 限速 |

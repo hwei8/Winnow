@@ -5,7 +5,7 @@
 ## 开始之前
 
 ```bash
-git clone https://github.com/OWNER/im-base.git && cd im-base
+git clone <this-repo> winnow && cd winnow
 npm install
 npm test          # 不需要任何 API key
 npm run check     # 语法检查

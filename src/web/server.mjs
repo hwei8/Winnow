@@ -1,4 +1,4 @@
-// server.mjs —— 记忆底座 P0 只读浏览服务器
+// server.mjs —— Winnow 只读浏览服务器
 //
 //   node web/server.mjs            # 默认 0.0.0.0:3083
 //   PORT=3083 HOST=0.0.0.0 node web/server.mjs
@@ -208,7 +208,7 @@ async function handleStreamPage(req, res, url) {
   const html = await renderPage({
     shellName: 'index',
     page: 'stream',
-    title: '记忆流 · 记忆底座 P0',
+    title: '记忆流 · Winnow',
     main: streamMain(data),
     boot: { page: 'stream', stream: data, stats: safeStats() }
   })
@@ -223,7 +223,7 @@ async function handleMemoryPage(req, res) {
   const html = await renderPage({
     shellName: 'index',
     page: 'memory',
-    title: '记忆 · 记忆底座',
+    title: '记忆 · Winnow',
     main: memoryMain({ captures, due }),
     boot: { page: 'memory' }
   })
@@ -241,7 +241,7 @@ async function handleStoryPage(req, res, storyId) {
     const html = await renderPage({
       shellName: 'index',
       page: 'story',
-      title: '事件不存在 · 记忆底座 P0',
+      title: '事件不存在 · Winnow',
       main: errorMain({ title: '事件不存在', detail: `查不到 story id：${storyId}` }),
       boot: { page: 'story' }
     })
@@ -251,7 +251,7 @@ async function handleStoryPage(req, res, storyId) {
   const html = await renderPage({
     shellName: 'story',
     page: 'story',
-    title: `${data.story.title} · 记忆底座 P0`,
+    title: `${data.story.title} · Winnow`,
     main: storyMain(data),
     boot: { page: 'story', story: data, stats: safeStats() }
   })
@@ -264,7 +264,7 @@ async function handleEntityPage(req, res, entityId) {
     const html = await renderPage({
       shellName: 'entity',
       page: 'entity',
-      title: '实体不存在 · 记忆底座 P0',
+      title: '实体不存在 · Winnow',
       main: errorMain({ title: '实体不存在', detail: `查不到 entity id：${entityId}` }),
       boot: { page: 'entity' }
     })
@@ -274,7 +274,7 @@ async function handleEntityPage(req, res, entityId) {
   const html = await renderPage({
     shellName: 'entity',
     page: 'entity',
-    title: `${data.entity.name} · 记忆底座 P0`,
+    title: `${data.entity.name} · Winnow`,
     main: entityMain(data),
     boot: { page: 'entity', entity: data, stats: safeStats() }
   })
@@ -467,7 +467,7 @@ async function route(req, res) {
 
     if (pathname === '/topics') {
       const html = await renderPage({
-        shellName: 'index', page: 'topics', title: '覆盖地图 · 记忆底座',
+        shellName: 'index', page: 'topics', title: '覆盖地图 · Winnow',
         main: topicsMain({ topics: getTopics(), beat: getLatestBeat() }), boot: { page: 'topics' }
       })
       sendHtml(res, 200, html)
@@ -482,7 +482,7 @@ async function route(req, res) {
         sendHtml(res, 404, await renderPage({ shellName: 'index', page: 'topics', title: '主题不存在', main: errorMain({ title: '主题不存在', detail: String(name) }), boot: { page: 'topics' } }))
         return
       }
-      const html = await renderPage({ shellName: 'index', page: 'topic', title: `${name} · 记忆底座`, main: topicMain(data), boot: { page: 'topic' } })
+      const html = await renderPage({ shellName: 'index', page: 'topic', title: `${name} · Winnow`, main: topicMain(data), boot: { page: 'topic' } })
       sendHtml(res, 200, html)
       return
     }
@@ -490,7 +490,7 @@ async function route(req, res) {
     if (pathname === '/search') {
       const q = url.searchParams.get('q') || ''
       const html = await renderPage({
-        shellName: 'index', page: 'search', title: q ? `搜索 ${q} · 记忆底座` : '搜索 · 记忆底座',
+        shellName: 'index', page: 'search', title: q ? `搜索 ${q} · Winnow` : '搜索 · Winnow',
         main: searchMain(getSearchPage(q)), boot: { page: 'search' }
       })
       sendHtml(res, 200, html)
@@ -499,7 +499,7 @@ async function route(req, res) {
 
     if (pathname === '/claims') {
       const html = await renderPage({
-        shellName: 'index', page: 'claims', title: '数据质量 · 记忆底座',
+        shellName: 'index', page: 'claims', title: '数据质量 · Winnow',
         main: claimsMain(getClaimIssues()), boot: { page: 'claims' }
       })
       sendHtml(res, 200, html)
@@ -508,7 +508,7 @@ async function route(req, res) {
 
     if (pathname === '/audit') {
       const html = await renderPage({
-        shellName: 'index', page: 'audit', title: '审计 · 记忆底座',
+        shellName: 'index', page: 'audit', title: '审计 · Winnow',
         main: auditMain(getAudit()), boot: { page: 'audit' }
       })
       sendHtml(res, 200, html)
@@ -517,7 +517,7 @@ async function route(req, res) {
 
     if (pathname === '/stance') {
       const html = await renderPage({
-        shellName: 'index', page: 'stance', title: '我的立场 · 记忆底座',
+        shellName: 'index', page: 'stance', title: '我的立场 · Winnow',
         main: stanceMain({ stances: getStances(), stats: getAnnotationStats() }), boot: { page: 'stance' }
       })
       sendHtml(res, 200, html)
@@ -529,7 +529,7 @@ async function route(req, res) {
       const html = await renderPage({
         shellName: 'index',
         page: 'brief',
-        title: '今日简报 · 记忆底座',
+        title: '今日简报 · Winnow',
         main: briefMain(brief),
         boot: { page: 'brief' }
       })
@@ -564,7 +564,7 @@ async function route(req, res) {
     const html = await renderPage({
       shellName: 'index',
       page: 'stream',
-      title: '页面不存在 · 记忆底座 P0',
+      title: '页面不存在 · Winnow',
       main: errorMain({ title: '页面不存在', detail: `没有这个地址：${pathname}` }),
       boot: { page: 'stream' }
     })
@@ -617,7 +617,7 @@ function lanAddresses() {
 server.listen(PORT, HOST, () => {
   const addrs = lanAddresses()
   const stats = safeStats()
-  console.log('记忆底座 P0 · 只读浏览服务')
+  console.log('Winnow · 只读浏览服务')
   console.log(`  监听：${HOST}:${PORT}`)
   for (const ip of addrs.length ? addrs : ['127.0.0.1']) {
     console.log(`  http://${ip}:${PORT}/`)

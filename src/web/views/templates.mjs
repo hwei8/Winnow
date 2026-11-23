@@ -73,7 +73,7 @@ export function headerHtml(stats = {}) {
   <div class="topbar-inner">
     <a class="brand" href="/" aria-label="回到记忆流">
       <span class="brand-mark">◈</span>
-      <span class="brand-text">记忆底座<em>P0</em></span>
+      <span class="brand-text">Winnow</span>
     </a>
     <nav class="topnav">
       <a class="topnav-link" href="/">记忆流</a>

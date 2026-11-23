@@ -6,13 +6,13 @@ import os from 'node:os'
 import path from 'node:path'
 import { freshDb } from '../src/shared/db.mjs'
 
-const tmpDir = mkdtempSync(path.join(os.tmpdir(), 'im-base-web-'))
+const tmpDir = mkdtempSync(path.join(os.tmpdir(), 'winnow-web-'))
 const dbPath = path.join(tmpDir, 'web.db')
 test.after(() => rmSync(tmpDir, { recursive: true, force: true }))
 
 function run (code) {
   return execFileSync(process.execPath, ['--input-type=module', '-e', code], {
-    env: { ...process.env, IM_DB: dbPath, NODE_NO_WARNINGS: '1' },
+    env: { ...process.env, WINNOW_DB: dbPath, NODE_NO_WARNINGS: '1' },
     encoding: 'utf8',
     timeout: 60000
   }).trim()

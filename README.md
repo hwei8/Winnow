@@ -1,6 +1,9 @@
-# im-base
+# Winnow
 
 **把新闻洪流折叠成可读的 Story 的个人记忆系统。**
+
+> *winnow*：扬场——把谷子抛起来，让风吹走谷壳，留下能吃的部分。
+
 *Personal memory & information filter — turn an endless feed into a handful of stories you can actually read, and remember what you decided to keep.*
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
@@ -13,7 +16,7 @@
 
 每天有几百条新闻在重复同一件事：一家公司发布同一条消息，十个媒体写十遍。多数阅读器只是在**堆积**——堆到最后你一条都不想看。
 
-im-base 做三件不同的事：
+winnow 做三件不同的事：
 
 1. **折叠**：把同一事件的多条报道合成一篇连贯的 Story，只在"真的发生了新事"时才更新它；
 2. **记住**：你说"记住这个"，它就记住；你标"已追平"，它就不再拿旧账搔你；
@@ -43,7 +46,7 @@ im-base 做三件不同的事：
 | 新闻摘要 App | 单篇摘要 | 记住你读过什么、你要什么 |
 | AI 聚合流 | 生成内容 | 证据可回溯、可纠错、可不看 |
 
-im-base 的前提是：**你的注意力有限，而同一件事只需要读一次**。
+winnow 的前提是：**你的注意力有限，而同一件事只需要读一次**。
 
 ## 架构
 
@@ -100,8 +103,8 @@ src/cli  ─┼─→ src/domains/*  ─→ src/providers/*  ─→ src/shared
 **要求**：Node ≥ 22.5（用 `node:sqlite`）、一个 OpenAI 兼容的 chat 端点、一个 embedding 端点。
 
 ```bash
-git clone <this-repo> im-base
-cd im-base
+git clone <this-repo> winnow
+cd winnow
 npm install
 
 cp .env.example .env      # 填入 key（也可以放 .secrets/，见下）
@@ -197,8 +200,8 @@ ZEN_API_KEY=...                # Jev 判定（有免费通道，失败自动兜�
 
 ## 参与
 
-欢迎 issue / PR。请先读 [CONTRIBUTING.md](CONTRIBUTING.md) 与 [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)；安全问题走 [SECURITY.md](SECURITY.md)。
+欢迎 issue / PR。改代码前先读 [CONTRIBUTING.md](CONTRIBUTING.md)；它是单人项目，没有行为准则委员会，**默认假设来者善意**。
 
 ## License
 
-MIT © im-base contributors
+MIT © winnow contributors

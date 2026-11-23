@@ -1,6 +1,6 @@
 # 数据模型
 
-数据库是一个 SQLite 文件（默认 `data/p0.db`），schema 定义在 [`src/shared/schema.mjs`](../src/shared/schema.mjs)，版本 `PRAGMA user_version = 16`。
+数据库是一个 SQLite 文件（默认 `data/winnow.db`），schema 定义在 [`src/shared/schema.mjs`](../src/shared/schema.mjs)，版本 `PRAGMA user_version = 16`。
 
 `npm run db:init` 建空库；`npm run db:stats` 看行数；`npm run db:backup` 做一致性快照（`VACUUM INTO`）。
 

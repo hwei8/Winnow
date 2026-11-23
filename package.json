@@ -1,5 +1,5 @@
 {
-  "name": "im-base",
+  "name": "winnow",
   "version": "0.1.0",
   "private": true,
   "description": "个人记忆与信息过滤系统：把新闻洪流折叠成可读的 Story，记住你想记的东西。",
@@ -23,17 +23,23 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/OWNER/im-base.git"
+    "url": "git+https://github.com/OWNER/winnow.git"
   },
   "keywords": [
     "personal-memory",
-    "knowledge-base",
+    "information-filter",
     "news-pipeline",
-    "llm",
-    "sqlite"
+    "story-generation",
+    "deduplication",
+    "sqlite",
+    "llm"
   ],
   "license": "MIT",
   "dependencies": {
     "sqlite-vec": "^0.1.9"
-  }
+  },
+  "bugs": {
+    "url": "https://github.com/OWNER/winnow/issues"
+  },
+  "homepage": "https://github.com/OWNER/winnow#readme"
 }

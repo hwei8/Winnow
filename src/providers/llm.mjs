@@ -3,12 +3,12 @@ import { readFileSync, existsSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
-import { env } from '../shared/config.mjs'
+import { env, envLegacy } from '../shared/config.mjs'
 
 const ENDPOINT = 'https://opencode.ai/inference/go/openai/v1/chat/completions'
-// 凭据文件：DSH_HOME/.credentials.yaml（默认 ~/.dsh/.credentials.yaml），可用 IM_CREDENTIALS_FILE 直指
+// 凭据文件：DSH_HOME/.credentials.yaml（默认 ~/.dsh/.credentials.yaml），可用 WINNOW_CREDENTIALS_FILE 直指
 const DSH_HOME = env('DSH_HOME') || path.join(os.homedir(), '.dsh')
-const CREDENTIALS = env('IM_CREDENTIALS_FILE') || path.join(DSH_HOME, '.credentials.yaml')
+const CREDENTIALS = envLegacy('WINNOW_CREDENTIALS_FILE', 'IM_CREDENTIALS_FILE') || path.join(DSH_HOME, '.credentials.yaml')
 const SESSION = randomUUID()
 
 function apiKey () {

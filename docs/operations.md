@@ -22,8 +22,8 @@
 | `ZEN_API_KEY` | ✅ | Jev 判定（免费通道优先，失败自动走 OpenRouter） |
 | `DEEPSEEK_SEARCH_TOKEN` | 可选 | 搜索发现 + 正文抓取兜底 |
 | `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` | 可选 | 简报推送 |
-| `IM_DB` | 可选 | 数据库路径（默认 `data/p0.db`） |
-| `IM_DATA_DIR` / `IM_OUT_DIR` | 可选 | 数据 / 产物目录 |
+| `WINNOW_DB` | 可选 | 数据库路径（默认 `data/winnow.db`） |
+| `WINNOW_DATA_DIR` / `WINNOW_OUT_DIR` | 可选 | 数据 / 产物目录 |
 | `HOST` / `PORT` | 可选 | Web 监听（默认 `0.0.0.0:3083`） |
 | `EMBED_PROVIDER` | 可选 | `openrouter`（默认）/ `local` |
 | `FETCH_FALLBACK=0` | 可选 | 关闭搜索 API 正文兜底 |
@@ -32,7 +32,7 @@
 
 1. `.env`（最简单，已在 `.gitignore`）；
 2. `.secrets/<name>`（`ZEN_API_KEY` → `.secrets/zen.key`）；
-3. 复用 DSH 凭据文件：`IM_CREDENTIALS_FILE=/path/.credentials.yaml`。
+3. 复用 DSH 凭据文件：`WINNOW_CREDENTIALS_FILE=/path/.credentials.yaml`。
 
 代码里**没有**默认 key、默认主机名、默认用户目录。
 
@@ -40,18 +40,18 @@
 
 ### 最小形态（systemd）
 
-`/etc/systemd/system/im-base-web.service`：
+`/etc/systemd/system/winnow-web.service`：
 
 ```ini
 [Unit]
-Description=im-base web
+Description=winnow web
 After=network-online.target
 
 [Service]
 Type=simple
-User=im
-WorkingDirectory=/srv/im-base
-EnvironmentFile=/srv/im-base/.env
+User=winnow
+WorkingDirectory=/srv/winnow
+EnvironmentFile=/srv/winnow/.env
 ExecStart=/usr/bin/node src/web/server.mjs
 Restart=on-failure
 RestartSec=5
@@ -60,22 +60,22 @@ RestartSec=5
 WantedBy=multi-user.target
 ```
 
-`/etc/systemd/system/im-base-daily.service` + `.timer`：
+`/etc/systemd/system/winnow-daily.service` + `.timer`：
 
 ```ini
-# im-base-daily.service
+# winnow-daily.service
 [Service]
 Type=oneshot
-User=im
-WorkingDirectory=/srv/im-base
-EnvironmentFile=/srv/im-base/.env
+User=winnow
+WorkingDirectory=/srv/winnow
+EnvironmentFile=/srv/winnow/.env
 ExecStart=/usr/bin/node src/cli/daemon.mjs --once --send
 ```
 
 ```ini
-# im-base-daily.timer
+# winnow-daily.timer
 [Unit]
-Description=im-base daily run
+Description=winnow daily run
 
 [Timer]
 OnCalendar=*-*-* 08:00:00
@@ -86,8 +86,8 @@ WantedBy=timers.target
 ```
 
 ```bash
-systemctl enable --now im-base-web.service im-base-daily.timer
-journalctl -u im-base-daily -f
+systemctl enable --now winnow-web.service winnow-daily.timer
+journalctl -u winnow-daily -f
 ```
 
 ### 单写者
@@ -113,16 +113,16 @@ npm run db:backup           # VACUUM INTO out/backup/p0-<时间>.db（一致性�
 恢复：
 
 ```bash
-systemctl stop im-base-web
-cp out/backup/p0-20261122T090000.db data/p0.db
-rm -f data/p0.db-wal data/p0.db-shm
-systemctl start im-base-web
+systemctl stop winnow-web.service
+cp out/backup/winnow-20261122T090000.db data/winnow.db
+rm -f data/winnow.db-wal data/winnow.db-shm
+systemctl start winnow-web.service
 ```
 
 建议 cron 每天一次 + 保留 14 天：
 
 ```bash
-0 3 * * * cd /srv/im-base && npm run db:backup && find out/backup -name 'p0-*.db' -mtime +14 -delete
+0 3 * * * cd /srv/winnow && npm run db:backup && find out/backup -name 'winnow-*.db' -mtime +14 -delete
 ```
 
 ## 监控

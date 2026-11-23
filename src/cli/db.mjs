@@ -33,7 +33,7 @@ if (has('--init')) {
   db.close()
 } else if (has('--backup')) {
   mkdirSync(path.join(OUT_DIR, 'backup'), { recursive: true })
-  const target = path.join(OUT_DIR, 'backup', `p0-${stamp()}.db`)
+  const target = path.join(OUT_DIR, 'backup', `winnow-${stamp()}.db`)
   const db = openDb()
   db.exec(`VACUUM INTO '${target.replace(/'/g, "''")}'`)
   db.close()

@@ -6,7 +6,7 @@ import path from 'node:path'
 import { freshDb, openDb } from '../src/shared/db.mjs'
 import { applySchema, SCHEMA_VERSION } from '../src/shared/schema.mjs'
 
-const tmpDir = mkdtempSync(path.join(os.tmpdir(), 'im-base-schema-'))
+const tmpDir = mkdtempSync(path.join(os.tmpdir(), 'winnow-schema-'))
 const dbPath = path.join(tmpDir, 'test.db')
 
 test.after(() => rmSync(tmpDir, { recursive: true, force: true }))

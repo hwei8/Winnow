@@ -29,6 +29,12 @@ export function env (name, fallback = undefined) {
   return v === undefined || v === '' ? fallback : v
 }
 
+/** 新名字优先，回落到更名前的旧名字（兼容期用；下个大版本移除）。 */
+export function envLegacy (name, legacy, fallback = undefined) {
+  const v = env(name)
+  return v !== undefined ? v : env(legacy, fallback)
+}
+
 export function envInt (name, fallback) {
   const v = Number(env(name))
   return Number.isFinite(v) ? v : fallback
@@ -41,13 +47,13 @@ export function envBool (name, fallback = false) {
 }
 
 // ── 目录 ────────────────────────────────────────────────────────────────
-export const DATA_DIR = path.resolve(ROOT, env('IM_DATA_DIR', 'data'))
-export const OUT_DIR = path.resolve(ROOT, env('IM_OUT_DIR', 'out'))
+export const DATA_DIR = path.resolve(ROOT, envLegacy('WINNOW_DATA_DIR', 'IM_DATA_DIR', 'data'))
+export const OUT_DIR = path.resolve(ROOT, envLegacy('WINNOW_OUT_DIR', 'IM_OUT_DIR', 'out'))
 export const CONFIG_DIR = path.join(ROOT, 'config')
 export const SECRETS_DIR = path.join(ROOT, '.secrets')
 
 // ── 数据库 ──────────────────────────────────────────────────────────────
-export const DB_PATH = path.resolve(ROOT, env('IM_DB', path.join(DATA_DIR, 'p0.db')))
+export const DB_PATH = path.resolve(ROOT, envLegacy('WINNOW_DB', 'IM_DB', path.join(DATA_DIR, 'winnow.db')))
 
 // ── 旧语料根（仅用于历史 frame 截图路径；新库不需要）─────────────────────
 const SUMMARY_CANDIDATES = [env('SUMMARY_ROOT'), path.join(ROOT, 'Summary')].filter(Boolean)

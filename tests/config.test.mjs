@@ -36,7 +36,7 @@ test('envBool treats 1/true/yes as true', () => {
 
 test('path helpers stay inside their roots', () => {
   assert.equal(outPath('briefs', 'a.md'), path.join(OUT_DIR, 'briefs', 'a.md'))
-  assert.equal(dataPath('p0.db'), path.join(DATA_DIR, 'p0.db'))
+  assert.equal(dataPath('winnow.db'), path.join(DATA_DIR, 'winnow.db'))
   assert.ok(OUT_DIR.startsWith(ROOT))
 })
 
