@@ -48,7 +48,8 @@ source ─┬─ item ─┬─ item_block            （原文分块，证据�
 | `kind` | `fact` / `statement` / `quote` / `meta` |
 | `confidence` | 0–1，被标注纠错会下调 |
 | `status` | `active` / `contested` / `superseded` / `unverified` |
-| `asserted_at`, `world_from` / `world_to` | 断言时间与事件有效期 |
+| `asserted_at` | 源什么时候说的（当前唯一真实使用的时间轴） |
+| `world_from` / `world_to` | 事件有效期。**字段存在但抽取不写**，属计划中能力（见 ADR 0003） |
 | `story_id` | 归属 Story（片段 Story 也有） |
 | `fact_id` | 归簇后的记忆单元 |
 | `embedding` | 1024 维向量（`Float32Array` blob） |

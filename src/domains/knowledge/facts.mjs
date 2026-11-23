@@ -48,7 +48,11 @@ export async function assignClaimsToFacts (db, claimIds, { decideFn = decide, em
     JOIN fact_claim fc ON fc.fact_id=f.id JOIN claim c ON c.id=fc.claim_id
     WHERE c.embedding IS NOT NULL GROUP BY f.id`).all().map(r => ({ id: r.id, text: r.canonical_text, vec: toVec(r.embedding) }))
 
-  const insF = db.prepare(`INSERT INTO fact(id,canonical_text,subject,predicate,object_text,temporal_kind,validity_mode,confidence,first_seen,last_updated,superseded_by,support_count,category) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+  const insF = db.prepare(`INSERT INTO fact(id,canonical_text,subject,predicate,object_text,temporal_kind,validity_mode,confidence,first_seen,last_updated,superseded_by,support_count,source_count,category) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+  // 独立源数：同一篇文章里的两条 claim 只能算一个源。support_count 是 claim 数，两者不能混用。
+  const countSources = db.prepare(`SELECT COUNT(DISTINCT i.source_id) c FROM fact_claim fc
+    JOIN claim c ON c.id = fc.claim_id JOIN item i ON i.id = c.item_id WHERE fc.fact_id = ?`)
+  const setSources = db.prepare('UPDATE fact SET source_count = ? WHERE id = ?')
   const insFC = db.prepare('INSERT OR REPLACE INTO fact_claim(fact_id,claim_id,stance,observed_at) VALUES (?,?,?,?)')
   const updC = db.prepare('UPDATE claim SET fact_id=? WHERE id=?')
   const bump = db.prepare('UPDATE fact SET support_count = support_count + 1, last_updated = ? WHERE id=?')
@@ -87,13 +91,17 @@ export async function assignClaimsToFacts (db, claimIds, { decideFn = decide, em
           insFC.run(best.id, c.id, 'supports', now); updC.run(best.id, c.id); bump.run(now, best.id); assigned++
         } else {
           const fid = 'F' + String(nextNum++).padStart(5, '0')
-          insF.run(fid, c.text, null, null, null, null, null, 0.8, now, now, null, 1, null)
+          insF.run(fid, c.text, null, null, null, null, null, 0.8, now, now, null, 1, 1, null)
           insFC.run(fid, c.id, 'supports', now); updC.run(fid, c.id); created++
           createdHere.push({ id: fid, text: c.text, vec: c.vec })
         }
       })
       db.exec('COMMIT')
     } catch (e) { db.exec('ROLLBACK'); throw e }
+    // 本批触碰过的事实重算独立源数（新建时为 1，并入后可能变成 2+）
+    const touched = new Set(createdHere.map(f => f.id))
+    cands.forEach(({ c }) => { const fid = db.prepare('SELECT fact_id FROM claim WHERE id=?').get(c.id)?.fact_id; if (fid) touched.add(fid) })
+    for (const fid of touched) setSources.run(countSources.get(fid).c, fid)
     factReps.push(...createdHere) // 后续批次也能召回本次新建的事实
   }
   return { assigned, created }

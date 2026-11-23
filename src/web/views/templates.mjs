@@ -461,6 +461,21 @@ export function auditMain (data) {
     <section class="panel"><h2 class="panel-title">本体提案（${arrayOf(a.ontologyPending).length} 条待审）</h2>
       <ul class="side-list">${arrayOf(a.ontologyPending).map(o => `<li><span class="pill">${esc(o.kind)}</span> <span class="dim">${esc((o.payload_json || '').slice(0, 90))}</span></li>`).join('') || '<li class="dim">运行 ontology.mjs --propose 生成</li>'}</ul>
     </section>
+
+    <section class="panel"><h2 class="panel-title">卡住的判定（${arrayOf(a.deferred).length} 条延期）</h2>
+      <p class="dim">判定器不可用时条目退回队列，<b>不</b>用余弦冒充概率；跑一次 <code>pipeline</code> 会重试。</p>
+      <ul class="side-list">${arrayOf(a.deferred).map(d => `<li><a href="/story/${encodeURIComponent(d.item_id)}">${esc((d.title || d.item_id).slice(0, 60))}</a> <span class="dim">${esc((d.decided_at || '').slice(0, 16))}</span></li>`).join('') || '<li class="dim">没有延期项</li>'}</ul>
+    </section>
+
+    <section class="panel"><h2 class="panel-title">该拆未拆（${arrayOf(a.splitPending).length} 篇）</h2>
+      <p class="dim">策略判了 split，但拆分需要把事实搬到新 Story，旧代码把它当 append 执行了。这些 Story 已经停止再追加。</p>
+      <ul class="side-list">${arrayOf(a.splitPending).map(p => `<li><a href="/story/${encodeURIComponent(p.id)}">${esc((p.title || p.id).slice(0, 60))}</a> <span class="dim">${esc(p.n)} 批待拆</span></li>`).join('') || '<li class="dim">没有待拆 Story</li>'}</ul>
+    </section>
+
+    <section class="panel"><h2 class="panel-title">事实的独立源分布</h2>
+      <p class="dim">只有 <b>source_count ≥ 2</b> 才算被两个源证实；同一篇文章里的两条 claim 不算互证。</p>
+      <ul class="side-list">${arrayOf(a.factSources).map(f => `<li><span class="pill">${esc(f.source_count)} 源</span> <span class="dim">${esc(f.n)} 条事实</span></li>`).join('') || '<li class="dim">无数据</li>'}</ul>
+    </section>
     <section class="panel"><h2 class="panel-title">源质量（验证率/争议/被纠错）</h2>
       <table class="cov-table"><thead><tr><th>源</th><th>条目</th><th>claim</th><th>验证率</th><th>争议</th><th>被纠错</th><th>分数</th></tr></thead><tbody>
       ${arrayOf(a.sourceQuality).map(q => `<tr><td>${esc(q.name || q.source_id)}</td><td>${esc(q.items)}</td><td>${esc(q.claims)}</td><td>${Math.round((q.verified_rate || 0) * 100)}%</td><td>${esc(q.contested)}</td><td>${esc(q.wrong_hits)}</td><td>${esc(q.score)}</td></tr>`).join('') || '<tr><td colspan="7" class="dim">运行 source_quality.mjs 生成</td></tr>'}

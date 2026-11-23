@@ -1,8 +1,7 @@
 // cli/extract-facts.mjs — 为补抓的条目抽 claim，并归入既有 fact 或新建 fact
 import { randomUUID } from 'node:crypto'
 import { openDb, nowIso } from '../shared/db.mjs'
-import { chat, extractJson } from '../providers/llm.mjs'
-import { locate } from '../domains/ingest/feed.mjs'
+import { extractClaimsFromText } from '../domains/ingest/claims.mjs'
 import { runPool } from '../shared/pool.mjs'
 import { assignClaimsToFacts } from '../domains/knowledge/facts.mjs'
 import { LLM_CHAT_MODEL } from '../shared/config.mjs'
@@ -18,18 +17,12 @@ const insClaim = db.prepare(`INSERT OR REPLACE INTO claim(id,story_id,item_id,te
 const insEv = db.prepare(`INSERT OR REPLACE INTO claim_evidence(claim_id,item_id,stance,segment_from,segment_to,time_start,time_end,frame_id,excerpt,verified) VALUES (?,?,?,?,?,?,?,?,?,?)`)
 const run = await runPool(items.map(it => async () => {
   const blocks = blocksOf.all(it.id).map(r => r.text)
-  const full = blocks.join('\n')
-  const r = await chat({ json: true, maxTokens: 10000, messages: [{ role: 'user', content: `从下面内容抽取最多 15 条原子事实，每条给逐字 quote（≥10 字），text 用简体中文。只输出 JSON：{"claims":[{"text":"...","quote":"...","confidence":0.8}]}\n\n${full.slice(0, 7000)}` }] })
-  const p = extractJson(r.content)
+  const claims = await extractClaimsFromText(blocks.join('\n'))
   let n = 0
-  for (const c of (p?.claims || [])) {
-    const t = String(c.text || '').trim(), q = String(c.quote || '').trim()
-    if (t.length < 8 || q.length < 8) continue
-    const pos = locate(full, q)
-    if (!pos) continue
+  for (const c of claims) {
     const cid = 'claim:' + it.id + ':' + randomUUID().slice(0, 8)
-    insClaim.run(cid, null, it.id, t, 'fact', '', '', '', Number.isFinite(c.confidence) ? c.confidence : 0.5, `llm:${LLM_CHAT_MODEL}`, nowIso(), null, 0, 'active', null, 2)
-    insEv.run(cid, it.id, 'supports', pos[0], pos[1], null, null, null, q.slice(0, 500), 1)
+    insClaim.run(cid, null, it.id, c.text, 'fact', '', '', '', c.confidence, `llm:${LLM_CHAT_MODEL}`, nowIso(), null, 0, 'active', null, 2)
+    insEv.run(cid, it.id, 'supports', c.start, c.end, null, null, null, c.quote.slice(0, 500), 1)
     n++
   }
   return n

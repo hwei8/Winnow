@@ -6,7 +6,7 @@ import { DatabaseSync } from 'node:sqlite'
 import { mkdirSync, rmSync } from 'node:fs'
 import path from 'node:path'
 import { DATA_DIR, DB_PATH, ROOT, SUMMARY_ROOT } from './config.mjs'
-import { applySchema } from './schema.mjs'
+import { SCHEMA_VERSION, applySchema, migrateSchema } from './schema.mjs'
 
 export { DB_PATH, ROOT, SUMMARY_ROOT, DATA_DIR }
 
@@ -19,7 +19,16 @@ export function openDb (dbPath = DB_PATH) {
   db.exec('PRAGMA journal_mode = WAL')
   db.exec('PRAGMA synchronous = NORMAL')
   db.exec('PRAGMA cache_size = -64000')
+  ensureSchema(db)
   return db
+}
+
+/** 打开即迁移：老库缺列时补列 + 回填，幂等；空库直接建全量 schema。 */
+function ensureSchema (db) {
+  const hasFact = db.prepare("SELECT 1 AS x FROM sqlite_master WHERE type='table' AND name='fact'").get()
+  if (!hasFact) { applySchema(db); return }
+  const version = db.prepare('PRAGMA user_version').get().user_version
+  if (version < SCHEMA_VERSION) migrateSchema(db)
 }
 
 /** 重建空库（会删除现有文件），用于初始化与测试。 */

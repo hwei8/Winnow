@@ -31,3 +31,14 @@
 | claim 流 | 实测不可读，用户明确否决 |
 | 纯摘要（每篇一段） | 跨源重复无法消除，等于换个 RSS 阅读器 |
 | 只存向量做 RAG | 没有"版本/更新"概念，无法回答"这件事变了吗" |
+
+## 补充（v17）：文档与实现的差距
+
+ADR 与设计文档早期描述过几个**尚未实现**的机制，复核时逐条核对过，现明确记录，避免下一个人再"重新发现"：
+
+- **并查集（union-find）事实聚类**：实现是单遍 leader 聚类（每个 fact 一条代表向量 + 同批 0.92 直接合并），
+  没有传递闭包；修法见 `docs/improvement-plan.md` Phase 4。
+- **SPO 三元组**：`fact.subject/predicate/object_text` 列存在但抽取不填；将来用作聚类 blocking key。
+- **`world_from` / `world_to`**：字段存在、抽取不写；替代方案是每条 claim 一个 `event_date`。
+- **链接候选阈值 0.62**：代码是 0.55（`knowledge/link.mjs` 的 `candTh`）。
+- **QA 的跨 Story 重复**：只做了 char-trigram 近似重复，没有语义级跨 Story 去重。

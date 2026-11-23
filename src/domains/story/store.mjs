@@ -41,8 +41,12 @@ export function repairSectionIds (db) {
     WHERE section_id GLOB 'sec[0-9]*'
       AND EXISTS (SELECT 1 FROM story_section ss WHERE ss.id = story_fact.story_id || ':' || story_fact.section_id)`).run().changes
 
-  const orphans = db.prepare(`SELECT story_id, fact_id, char_start, char_end FROM story_fact sf
-    WHERE NOT EXISTS (SELECT 1 FROM story_section ss WHERE ss.id = sf.section_id)`).all()
+  // 待定的追加锚点（role='update'，跨度 0..0）不是"丢了归属"，而是还没进正文：
+  // 按区间归位会把它们钉到第 1 节，consolidate 之后再也认不出它们是待处理的更新。
+  const orphans = db.prepare(`SELECT story_id, fact_id, role, char_start, char_end FROM story_fact sf
+    WHERE NOT EXISTS (SELECT 1 FROM story_section ss WHERE ss.id = sf.section_id)
+      AND COALESCE(sf.role, '') != 'update'
+      AND sf.char_end > sf.char_start`).all()
   const strict = db.prepare(`SELECT id FROM story_section
     WHERE story_id = ? AND char_start <= ? AND char_end >= ?
     ORDER BY (char_end - char_start) ASC LIMIT 1`)
@@ -50,13 +54,15 @@ export function repairSectionIds (db) {
     WHERE story_id = ? AND char_start <= ? AND char_end > ?
     ORDER BY (char_end - char_start) ASC LIMIT 1`)
   const update = db.prepare(`UPDATE story_fact SET section_id = ?
-    WHERE story_id = ? AND fact_id = ? AND char_start = ?`)
+    WHERE story_id = ? AND fact_id = ? AND char_start = ? AND char_end = ?
+      AND COALESCE(role, '') != 'update'
+      AND NOT EXISTS (SELECT 1 FROM story_section ss WHERE ss.id = story_fact.section_id)`)
 
   let ranged = 0
   for (const r of orphans) {
     const hit = strict.get(r.story_id, r.char_start, r.char_end) || loose.get(r.story_id, r.char_start, r.char_start)
     if (!hit) continue
-    update.run(hit.id, r.story_id, r.fact_id, r.char_start)
+    update.run(hit.id, r.story_id, r.fact_id, r.char_start, r.char_end)
     ranged++
   }
   return prefixed + ranged

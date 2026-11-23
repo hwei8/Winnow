@@ -42,7 +42,7 @@
 | `config.mjs` | **唯一**的路径 / 环境变量 / 密钥入口。`.env` 自动加载，不覆盖已有 env |
 | `db.mjs` | `openDb()` / `freshDb()`（WAL、busy_timeout；外键约束未启用，见 data-model），以及文本小工具 |
 | `net.mjs` | 出站抓取护栏：只允许公网 http(s)、逐跳校验重定向、响应体上限（防 SSRF） |
-| `schema.mjs` | 数据库 schema 的**唯一权威定义**（v16，50 表 + 索引，全部 `IF NOT EXISTS`） |
+| `schema.mjs` | 数据库 schema 的**唯一权威定义**（v17，50 表 + 索引，全部 `IF NOT EXISTS`；`openDb()` 打开即补列） |
 | `pool.mjs` | 全局并发池：限流 + 429 感知（默认 10 并发） |
 
 ### providers —— 外部能力
@@ -133,7 +133,7 @@ sequenceDiagram
   participant SP as story/policy
   AD->>IP: url / item
   IP->>IP: 抓正文（直连 → 搜索 API 兜底）
-  IP->>IP: 抽 claim（≤15 条，带引文与时间）
+  IP->>IP: 抽 claim（分块 3500 字，每块 6–12 条，全文上限 40）
   IP->>KF: 归簇（向量 top-k → Jev 判定）
   KF-->>IP: fact ids
   IP->>KL: 这段内容属于哪个 Story？

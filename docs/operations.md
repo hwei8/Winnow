@@ -175,7 +175,7 @@ systemctl start winnow-web.service
 `token_ledger` 记录每次调用的 token 与成本，`/audit` 有 Token 账本面板。三个阀门：
 
 1. `pipeline` 的 `--limit`（每天采多少）；
-2. 抽取的 15 条上限（每篇的固定成本）；
+2. 抽取的分块数（每篇 1–12 块，块数≈字数/3500，可用 `EXTRACT_CHUNK_CHARS` / `EXTRACT_MAX_CHUNKS` 调）；
 3. 重写策略（P4 不写、P2 先合并）——这是最大的省钱项。
 
 按每天 30 篇新 Story：≈0.4M tokens/天，个人预算内几乎无感。真正的瓶颈是正文抓取成功率。

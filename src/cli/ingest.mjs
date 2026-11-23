@@ -7,10 +7,9 @@
 import { createHash } from 'node:crypto'
 import { openDb, nowIso } from '../shared/db.mjs'
 import { LLM_CHAT_MODEL } from '../shared/config.mjs'
-import { locate } from '../domains/ingest/feed.mjs'
+import { extractClaimsFromText } from '../domains/ingest/claims.mjs'
 import { loadArticle } from '../domains/ingest/page.mjs'
 import { saveItem, itemIdFor, loadItem } from '../domains/ingest/store.mjs'
-import { chat, extractJson } from '../providers/llm.mjs'
 import { assignClaimsToFacts } from '../domains/knowledge/facts.mjs'
 import { linkIncoming } from '../domains/knowledge/link.mjs'
 
@@ -46,20 +45,14 @@ async function ingest (url) {
   return { url, id, title, text: blocks.join('\n'), blocks }
 }
 
-// ── 阶段 2：抽 claim ────────────────────────────────────
+// ── 阶段 2：抽 claim（分块，见 domains/ingest/claims.mjs）───────────
 async function extractClaims (item) {
-  const full = item.text
-  const r = await chat({ json: true, maxTokens: 10000, messages: [{ role: 'user', content: `从下面内容抽取最多 15 条原子事实，每条给逐字 quote（≥10 字），text 用简体中文。只输出 JSON：{"claims":[{"text":"...","quote":"...","confidence":0.8}]}\n\n${full.slice(0, 7000)}` }] })
-  const p = extractJson(r.content)
+  const claims = await extractClaimsFromText(item.text)
   const ids = []
-  for (const c of (p?.claims || [])) {
-    const t = String(c.text || '').trim(), q = String(c.quote || '').trim()
-    if (t.length < 8 || q.length < 8) continue
-    const pos = locate(full, q)
-    if (!pos) continue
-    const cid = 'claim:' + item.id + ':' + h(t).slice(0, 6)
-    insClaim.run(cid, null, item.id, t, 'fact', '', '', '', Number.isFinite(c.confidence) ? c.confidence : 0.5, `llm:${LLM_CHAT_MODEL}`, nowIso(), null, 0, 'active', null, 2)
-    insEv.run(cid, item.id, 'supports', pos[0], pos[1], null, null, null, q.slice(0, 500), 1)
+  for (const c of claims) {
+    const cid = 'claim:' + item.id + ':' + h(c.text).slice(0, 6)
+    insClaim.run(cid, null, item.id, c.text, 'fact', '', '', '', c.confidence, `llm:${LLM_CHAT_MODEL}`, nowIso(), null, 0, 'active', null, 2)
+    insEv.run(cid, item.id, 'supports', c.start, c.end, null, null, null, c.quote.slice(0, 500), 1)
     ids.push(cid)
   }
   return ids
@@ -73,6 +66,16 @@ async function decideAndApply (item, claimIds) {
   const link = await linkIncoming({ title: item.title, body: item.text, factIds })
   const action = link.action
   const parentId = link.parent?.id || null
+  // 判定器不可用：不再猜，也不写 story_link（写下去就会被当成已决），条目退回队列等下一轮
+  if (action === 'deferred') {
+    db.prepare('INSERT OR REPLACE INTO ingest_decision(item_id,action,parent_story_id,same_event,gap_count,claims,decided_at) VALUES (?,?,?,?,?,?,?)')
+      .run(item.id, 'deferred', null, null, 0, claimIds.length, nowIso())
+    if (item.url) {
+      db.prepare("INSERT OR IGNORE INTO ingest_queue(id,url,source,status,created_at) VALUES (?,?,?,?,?)")
+        .run('q:retry:' + item.id.slice(-12), item.url, 'deferred', 'pending', nowIso())
+    }
+    return { item: item.id, decision: 'deferred', reason: link.reason || 'jev-unavailable', assigned, created }
+  }
   // 记录链接
   if (parentId) db.prepare('INSERT OR REPLACE INTO story_link(story_id,related_story_id,relation,same_event_prob,overlap,gap_count,gap_facts_json,created_at) VALUES (?,?,?,?,?,?,?,?)')
     .run(item.id, parentId, action, link.parent.same_event, link.parent.cos, (link.parent.gap || []).length, JSON.stringify((link.parent.gap || []).map(g => g.id)), nowIso())

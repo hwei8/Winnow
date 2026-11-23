@@ -16,9 +16,10 @@ await check(`embed-${emb.provider}`, async () => {
   return `dims=${v[0].length} model=${emb.model} fallback=${emb.fallback}`
 })
 await check('jev', async () => {
-  const { noulBatch } = await import('../providers/jev.mjs')
+  const { noulBatch, jevProviderInfo } = await import('../providers/jev.mjs')
+  const info = jevProviderInfo()
   const r = await noulBatch({ items: ['A 公司发布新芯片', 'A 公司推出新款处理器'] }, ['这两句是否同一事件？'])
-  return `model=${r.model || '?'} noul=${JSON.stringify(r.probabilities)}`
+  return `primary=${info.provider} fallback=${info.fallback} model=${r.model || '?'} noul=${JSON.stringify(r.probabilities)}`
 })
 await check('telegram', async () => {
   const { telegramConfig } = await import('../providers/telegram.mjs')

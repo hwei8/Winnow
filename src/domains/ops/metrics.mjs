@@ -1,6 +1,7 @@
 // ops/metrics.mjs — 系统度量：追平率 / 信噪比 / 冗余率 / 覆盖 / 简报选择率
 import { randomUUID } from 'node:crypto'
 import { nowIso } from '../../shared/db.mjs'
+import { QA_VERSION } from '../story/qa-version.mjs'
 
 export function computeMetrics (db) {
   const num = (sql, ...args) => Number(db.prepare(sql).get(...args)?.c ?? 0)
@@ -17,7 +18,9 @@ export function computeMetrics (db) {
   const annTotal = num('SELECT COUNT(*) c FROM annotation')
   const annKnown = num("SELECT COUNT(*) c FROM annotation WHERE kind IN ('known','read')")
   const annWrong = num("SELECT COUNT(*) c FROM annotation WHERE kind='wrong'")
-  const qa = db.prepare('SELECT COUNT(*) c, AVG(score) avg FROM story_qa').get()
+  // 只统计当前公式版本：跨版本平均会把公式变化当成质量变化
+  const qa = db.prepare('SELECT COUNT(*) c, AVG(score) avg FROM story_qa WHERE qa_version = ?').get(QA_VERSION)
+  const qaStale = num('SELECT COUNT(*) c FROM story_qa WHERE COALESCE(qa_version,0) <> ?', QA_VERSION)
   const brief = db.prepare('SELECT items_json FROM briefing ORDER BY generated_at DESC LIMIT 1').get()
   let briefPicked = 0, briefCandidates = 0
   if (brief) { try { const items = JSON.parse(brief.items_json || '[]'); briefPicked = items.length } catch {} }
@@ -27,7 +30,7 @@ export function computeMetrics (db) {
     at: nowIso(),
     stories: { active, with_body: withBody, tracked, caught_up: caughtUp, catch_up_rate: tracked ? Math.min(1, Math.round(caughtUp / tracked * 100) / 100) : 0 },
     claims: { total: claims, facts, fact_redundancy: claims ? Math.round((1 - facts / claims) * 100) / 100 : 0, dup_flagged: dupSlice },
-    qa: { stories: Number(qa.c), avg: Math.round((qa.avg || 0) * 10) / 10 },
+    qa: { version: QA_VERSION, stories: Number(qa.c), avg: Math.round((qa.avg || 0) * 10) / 10, other_versions: qaStale },
     annotations: { total: annTotal, known: annKnown, wrong: annWrong, wrong_rate: annTotal ? Math.round(annWrong / annTotal * 100) / 100 : 0 },
     briefing: { latest_picked: briefPicked, pending_stories: pendingStories, selection_rate: pendingStories ? Math.round(briefPicked / pendingStories * 100) / 100 : 0 }
   }

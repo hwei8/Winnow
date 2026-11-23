@@ -3,7 +3,7 @@
 // 由 v16 线上库导出：新库执行 applySchema() 即可得到与生产一致的形态；
 // 历史增量迁移脚本不再参与建库（见 docs/adr/0002-schema-as-code.md）。
 
-export const SCHEMA_VERSION = 16
+export const SCHEMA_VERSION = 17
 export const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS adapter_health (adapter TEXT, checked_at TEXT, ok INTEGER, latency_ms INTEGER, detail TEXT, PRIMARY KEY(adapter, checked_at));
 
@@ -118,6 +118,8 @@ CREATE TABLE IF NOT EXISTS fact (
   first_seen TEXT, last_updated TEXT,
   superseded_by TEXT,
   support_count INTEGER DEFAULT 0,
+  source_count INTEGER DEFAULT 0,   -- 独立源数（distinct item.source_id）。support_count 只是 claim 数，
+                                    -- 同一篇文章里的两条 claim 不是两个源，v17 起所有"关键事实"判定都用这个。
   category TEXT
 );
 
@@ -350,6 +352,7 @@ CREATE TABLE IF NOT EXISTS story_qa (
   fact_count INTEGER,
   missed_facts INTEGER,
   issues_json TEXT,
+  qa_version INTEGER DEFAULT 0,     -- 打分公式版本。跨版本求均值没有意义（历史 86.8→80.6 的"下降"大半是换公式）
   checked_at TEXT
 );
 
@@ -470,7 +473,29 @@ CREATE INDEX IF NOT EXISTS idx_story_section_story ON story_section(story_id, or
 `
 
 /** 在给定连接上建表（幂等：全部 CREATE ... IF NOT EXISTS）。 */
+/**
+ * 存量库增量迁移：SQLite 没有 `ADD COLUMN IF NOT EXISTS`，所以按 pragma 逐个补，幂等。
+ * 新库不会走到这里（建表语句里已经有这些列）。
+ */
+export function migrateSchema (db) {
+  const cols = (table) => new Set(db.prepare(`PRAGMA table_info(${table})`).all().map(r => r.name))
+  const factCols = cols('fact')
+  if (!factCols.has('source_count')) db.exec('ALTER TABLE fact ADD COLUMN source_count INTEGER DEFAULT 0')
+  const qaCols = cols('story_qa')
+  if (!qaCols.has('qa_version')) db.exec('ALTER TABLE story_qa ADD COLUMN qa_version INTEGER DEFAULT 0')
+
+  // 回填独立源数：同一 item 的两条 claim 只算一个源。
+  db.exec(`UPDATE fact SET source_count = COALESCE((
+    SELECT COUNT(DISTINCT i.source_id) FROM fact_claim fc
+      JOIN claim c ON c.id = fc.claim_id
+      JOIN item i ON i.id = c.item_id
+     WHERE fc.fact_id = fact.id), 0)`)
+  db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`)
+}
+
 export function applySchema (db) {
   db.exec(SCHEMA_SQL)
+  const version = db.prepare('PRAGMA user_version').get().user_version
+  if (version < SCHEMA_VERSION) migrateSchema(db)
   db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`)
 }

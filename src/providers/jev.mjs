@@ -1,6 +1,10 @@
-// providers/jev.mjs — Jev 决策模型客户端（OpenCode Zen 免费优先，OpenRouter 兜底）
-// 主通道：OpenCode Zen System One（jev-1.13-free，免费、~200ms、实测 24 并发无 429）
-// 兜底：OpenRouter Decisions API（~typesafe/jev-latest = 1.14，$0.042/1M 输入）
+// providers/jev.mjs — Jev 决策模型客户端（默认 OpenRouter 1.14，Zen 免费档降为兜底）
+//
+// 主通道：OpenRouter Decisions（~typesafe/jev-latest = 1.14）。同一套 45–186 对基准上
+//   same_event 最优 F1 0.757@0.4，比 Zen 免费档（0.696@0.4）高 6 个点，硬负误报率 0.35 vs 0.333，
+//   代价约 $0.0012/20 问 —— 19 篇/天的量级上一个月不到 $0.5，不值得为省钱用弱一档的判定器。
+// 兜底：OpenCode Zen System One（jev-1.13-free，免费，实测 24 并发无 429），只在前者失败时使用。
+// 想反过来用免费档：JEV_PROVIDER=zen。
 import { readSecret } from '../shared/config.mjs'
 
 const ZEN_URL = process.env.JEV_ZEN_URL || 'https://opencode.ai/zen/v1/systemone'
@@ -8,7 +12,7 @@ const OR_URL = process.env.JEV_OR_URL || 'https://openrouter.ai/api/alpha/decisi
 
 const ZEN_KEY = readSecret('ZEN_API_KEY', 'zen.key')
 const OR_KEY = readSecret('OPENROUTER_API_KEY', 'openrouter.key')
-const PROVIDER = process.env.JEV_PROVIDER || (ZEN_KEY ? 'zen' : (OR_KEY ? 'openrouter' : 'zen'))
+const PROVIDER = process.env.JEV_PROVIDER || (OR_KEY ? 'openrouter' : 'zen')
 const FALLBACK = process.env.JEV_FALLBACK !== '0'
 
 // 本地 decision（llama.cpp glide，/v1/systemone，无鉴权）——只用于离线批任务与审计第二意见。

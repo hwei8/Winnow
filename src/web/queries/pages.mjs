@@ -281,7 +281,15 @@ export function getAudit ({ limit = 30 } = {}) {
   if (metricsRow) { try { metrics = { at: metricsRow.at, ...JSON.parse(metricsRow.metrics_json || '{}') } } catch {} }
   const ontologyPending = all("SELECT id,kind,payload_json,created_at FROM ontology_proposal WHERE status='pending' ORDER BY created_at DESC LIMIT 15")
   const recheckCount = Number(one("SELECT COUNT(*) c FROM claim WHERE status='needs_recheck'")?.c ?? 0)
-  return { adapters, latestBrief: latestBrief ? { id: latestBrief.id, date: latestBrief.date, generated_at: latestBrief.generated_at, count: briefIds.length } : null, pendingStories, skipped, tokens, dayTokens, annotations: { total: annTotal, byKind: annByKind, consumed, effectsApplied }, sourceQuality, metrics, ontologyPending, recheckCount }
+  // 卡住的流水线项：判定器不可用（deferred）与"该拆未拆"（split_pending）以前都是静默的
+  const deferred = all(`SELECT d.item_id, i.title, d.decided_at FROM ingest_decision d
+    LEFT JOIN item i ON i.id = d.item_id WHERE d.action='deferred' ORDER BY d.decided_at DESC LIMIT 10`)
+  const splitPending = all(`SELECT s.id, s.title, COUNT(u.id) n, MAX(u.at) last_at FROM story_update u
+    JOIN story s ON s.id = u.story_id WHERE u.action='split_pending'
+    GROUP BY s.id ORDER BY n DESC LIMIT 10`)
+  // 关键事实的独立源份额：source_count≥2 才算被两个源证实
+  const factSources = all('SELECT source_count, COUNT(*) n FROM fact GROUP BY source_count ORDER BY source_count')
+  return { adapters, deferred, splitPending, factSources, latestBrief: latestBrief ? { id: latestBrief.id, date: latestBrief.date, generated_at: latestBrief.generated_at, count: briefIds.length } : null, pendingStories, skipped, tokens, dayTokens, annotations: { total: annTotal, byKind: annByKind, consumed, effectsApplied }, sourceQuality, metrics, ontologyPending, recheckCount }
 }
 
 // ── /stance：我的立场 ───────────────────────────────────────────────────

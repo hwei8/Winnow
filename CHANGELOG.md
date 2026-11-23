@@ -1,3 +1,15 @@
+## 0.3.0 — Phase 0：正确性与账单诚实
+
+- **链接判定默认改走 OpenRouter 1.14**（`JEV_PROVIDER` 可回退 zen）。同一份基准上 same_event 最优 F1 0.757@0.4 vs Zen 免费档 0.696@0.4，代价约 $0.2/月。
+- **判定器不可用不再拿余弦冒充概率**：`linkIncoming()` 返回 `action:'deferred'`，条目不写 `story_link`、退回 `ingest_queue` 等下一轮（`/audit` 新增「卡住的判定」面板）。
+- **删掉链接的"跳转"**：以前顺着 `story_link` 跳到更大的 Story 时只替换 `id/title/facts`，`same_event` 与 `gap` 仍是小 Story 的，判定落在错的那篇上。
+- **`split` 不再静默变 append**：判了拆分就记 `split_pending`（`/audit` 可见），不往正文后面贴事实。
+- **`repairSectionIds` 跳过 pending 锚点**（`role='update'`、零长跨度），否则一次 `db:repair` 会把待处理更新钉进第 1 节。
+- **schema v17**：`fact.source_count`（独立源数，distinct `item.source_id`）与 `story_qa.qa_version`；`openDb()` 打开即迁移并回填。
+- **关键事实改按独立源计**：QA 的 `coverageKey` 与简报都用 `source_count ≥ 2`；`support_count`（claim 数）只作展示。实测 329 个"多 claim"事实里只有 112 个真正跨两个源。
+- **抽取分块**：3500 字/块 + 每块 6–12 条 + 跨块去重 + 总数上限 40，替掉"最多 15 条 + 只读前 7000 字"。实测 24,848 字文章产出 40 条（旧上限 15），8 块耗时 110s。
+- 文档修正：并查集/SPO/`world_from`/候选阈值 0.62 四处与实现不一致的描述，改为"计划中"或改成真实值（ADR 0003 附录）。
+
 # 变更记录
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循语义化。

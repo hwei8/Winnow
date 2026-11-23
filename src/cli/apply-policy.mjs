@@ -90,7 +90,11 @@ for (const g of groups.values()) {
         result.fallbackAppend = factIds.length
       }
     }
-  } else if (cls.action === 'append' || cls.action === 'split') {
+  } else if (cls.action === 'split') {
+    // 拆分是把这一坨事实搬到新 Story，不是往正文后面贴。以前跟 append 写在同一分支，
+    // 判决是 split 也照 append 执行，等于把"该拆"悄悄降级成"越写越长"。
+    result.splitPending = factIds.length
+  } else if (cls.action === 'append') {
     const parent = db.prepare('SELECT id,title,body_md FROM story WHERE id=?').get(g.storyId)
     if (parent?.body_md) {
       const gapFacts = db.prepare(`SELECT id,canonical_text FROM fact WHERE id IN (${factIds.map(() => '?').join(',')})`).all(...factIds)
@@ -100,7 +104,8 @@ for (const g of groups.values()) {
       result.appended = gapFacts.length
     }
   }
-  for (const rr of g.rows) db.prepare('UPDATE story_update SET severity=?,action=?,reason=? WHERE id=?').run(cls.severity, cls.action, JSON.stringify(cls.reasons), rr.id)
+  const applied = cls.action === 'split' ? 'split_pending' : cls.action
+  for (const rr of g.rows) db.prepare('UPDATE story_update SET severity=?,action=?,reason=? WHERE id=?').run(cls.severity, applied, JSON.stringify(cls.reasons), rr.id)
   report.push({ story: g.storyId, rows: g.rows.length, ...result, cls: { gap: cls.gapCount, retraction: cls.retraction, lede: cls.lede, split: cls.split, sections: cls.updateSections, dupRisk: cls.dupRisk } })
 }
 for (const x of report) {

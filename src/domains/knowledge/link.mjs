@@ -96,15 +96,18 @@ export async function linkIncoming ({ title, body, factIds = [], excludeStoryId 
       const factAffinity = bests.length ? bests.reduce((a, b) => a + b, 0) / bests.length : 0
       const affinityRatio = bests.length ? bests.filter(b => b >= 0.75).length / bests.length : 0
       const state = { a: { title, body: (body || '').slice(0, 1500) }, b: { title: c.title, body: (db.prepare('SELECT body_md FROM story WHERE id=?').get(c.id)?.body_md || '').slice(0, 1500) } }
-      let same = c.cos
+      // 判定器不可用时不再拿余弦冒充概率：cos 0.7 不是"70% 可能是同一事件"。
+      // 记 judged=false，由调用方延期重试；否则一次 5xx 就会写进一条错的链接。
+      let same = null
       try {
         const r = await decide({ state, questions: { q: { type: 'noul', instructions: 'Story A and Story B report the same specific event/topic.', criteria: { true: 'Same subject and same specific event/topic.', false: 'Different events or unrelated topics.' } } } })
-        same = r.answers.q?.noul ?? c.cos
-      } catch {}
-      // 事实亲和度足够高时，视作同一事件（正文 embedding 对短文会失真）
-      let sameFinal = same
-      if ((factAffinity >= 0.72 || affinityRatio >= 0.4) && c.cos >= 0.50) sameFinal = Math.max(same, 0.8)
-      results.push({ id: c.id, title: c.title, cos: +c.cos.toFixed(3), same_event: +sameFinal.toFixed(2), fact_affinity: +factAffinity.toFixed(3), affinity_ratio: +affinityRatio.toFixed(2), gap, facts: parentFacts.length })
+        same = r.answers.q?.noul ?? null
+      } catch (e) { console.error('[link] judge failed:', c.id, String(e.message).slice(0, 80)) }
+      const judged = same !== null
+      // 事实亲和度足够高时，视作同一事件（正文 embedding 对短文会失真）；没有判定结果时不启用
+      let sameFinal = judged ? same : 0
+      if (judged && (factAffinity >= 0.72 || affinityRatio >= 0.4) && c.cos >= 0.50) sameFinal = Math.max(same, 0.8)
+      results.push({ id: c.id, title: c.title, cos: +c.cos.toFixed(3), same_event: +sameFinal.toFixed(2), judged, fact_affinity: +factAffinity.toFixed(3), affinity_ratio: +affinityRatio.toFixed(2), gap, facts: parentFacts.length })
     }
     if (!results.length) return { parent: null, action: 'new', reason: 'no-candidate-after-judge', top: cands.slice(0, 3) }
     results.sort((a, b) => b.same_event - a.same_event || b.cos - a.cos)
@@ -112,29 +115,18 @@ export async function linkIncoming ({ title, body, factIds = [], excludeStoryId 
     const topScore = results[0].same_event
     const near = results.filter(r => r.same_event >= Math.max(0.65, topScore - 0.15))
     let best = near.length ? near.sort((a, b) => b.facts - a.facts || b.same_event - a.same_event)[0] : results[0]
-    // 规范化：并入被合并的主 Story；小碎片跟随链接找到更大的主 Story
+    // 规范化：只做 merged_into 跳转，且必须跳到"本批真的判过"的候选上。
+    // 以前这里还会顺着 story_link 跳到更大的 Story，跳完只替换 id/title/facts——
+    // same_event 与 gap 仍是小 Story 的，后面的 duplicate/update 判定就落在错的那篇上。
     let guard = 0
     while (best && guard++ < 5) {
       const row = db.prepare('SELECT merged_into FROM story WHERE id=?').get(best.id)
-      if (row?.merged_into) { const m = results.find(x => x.id === row.merged_into); if (m) { best = m; continue } }
-      if (best.facts >= 20) break
-      const linked = db.prepare(`SELECT CASE WHEN story_id=? THEN related_story_id ELSE story_id END AS other
-        FROM story_link WHERE (story_id=? OR related_story_id=?) AND relation IN ('duplicate','update','overlap','related')`).all(best.id, best.id, best.id)
-      let bigger = null
-      for (const l of linked) {
-        if (l.other === best.id) continue
-        const cnt = db.prepare('SELECT COUNT(*) c FROM story_fact WHERE story_id=?').get(l.other).c
-        if (cnt > (bigger?.facts || best.facts * 2)) bigger = { id: l.other, facts: cnt }
-      }
-      if (!bigger) break
-      const alt = results.find(x => x.id === bigger.id)
-      if (alt) best = alt
-      else {
-        const t = db.prepare('SELECT title FROM story WHERE id=?').get(bigger.id)
-        if (!t) break
-        best = { ...best, id: bigger.id, title: t.title, facts: bigger.facts }
-      }
+      const m = row?.merged_into ? results.find(x => x.id === row.merged_into) : null
+      if (!m) break
+      best = m
     }
+    if (!best) return { parent: null, action: 'new', reason: 'no-candidate-after-judge', top: results.slice(0, 3) }
+    if (!best.judged) return { parent: null, action: 'deferred', reason: 'jev-unavailable', top: results.slice(0, 3) }
     let action = 'new'
     if (best.same_event >= 0.7 && best.gap.length === 0) action = 'duplicate'
     else if (best.same_event >= 0.7 && best.gap.length > 0) action = 'update'

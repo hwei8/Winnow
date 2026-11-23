@@ -41,22 +41,28 @@ cli/ingest.mjs → cli/finalize.mjs → cli/apply-policy.mjs → cli/apply-conso
 
 ## 2. 抽（extract）
 
-一次调用抽出**最多 15 条**原子事实，带 `subject / predicate / object / 时间 / 引文`，引文必须来自原文。
+正文按段落切 ~3500 字一块（默认最多 12 块），每块按长度给上限 6–12 条，跨块按规范化文本去重，总数上限 40。
+每条事实带 `subject / predicate / object / 引文`，引文必须能在原文逐字定位（`locate()` 对不上就丢，这是证据红线）。
 
-- 输入截断到 7000 字（长文只吃前段）；
-- 时间归一：`asserted_at`（消息时间）与 `world_from/world_to`（事件有效期）；
-- 失败重试 6 次，429 退避。
+- 参数：`EXTRACT_CHUNK_CHARS`（默认 3500）、`EXTRACT_MAX_CHUNKS`（默认 12）、`EXTRACT_MAX_CLAIMS`（默认 40）；
+- 时间归一：`asserted_at`（消息时间）。`world_from/world_to` 是**计划中**的事件有效期字段，当前抽取不写（见 ADR 0003）；
+- 失败重试 6 次，429 退避；单块失败只丢这一块，不丢整篇。
 
-> 已知限制：固定 15 条上限让深度长文（SemiAnalysis 24k 字）与短讯一样只产出 15 条事实。下一步按字数动态放开（计划见 STATUS）。
+> 历史限制：v17 之前是"最多 15 条 + 只读前 7000 字"，24k 字的 SemiAnalysis 与 1.2k 字的快讯产出一样多。"修改原因见 `docs/improvement-plan.md` Phase 0.9。
 
 ## 3. 簇（knowledge/facts）
 
 把新 claim 归入既有 fact，否则新建：
 
-1. 向量召回 top-8（cosine ≥ 0.55）；
-2. 逐对问 Jev：「这两句是不是同一个核心事实？」（返回 0–1，阈值 0.5）；
-3. 并查集合并，写 `fact_claim`；
-4. `fact.support_count` = 独立来源数。
+1. 每个 fact 取**一条**有向量的成员 claim 作代表向量（不是全体成员的质心）；
+2. 新 claim 召回 top-3 代表向量（cosine ≥ 0.55），逐对问 Jev：「这两句是不是同一个核心事实？」（阈值 0.6）；
+3. 同批内新建的 fact 用 cosine ≥ 0.92 直接合并；否则**单遍 leader 聚类**（不是并查集，也没有传递闭包），
+   新建 fact 时 `canonical_text` 冻结在首条 claim 的写法上；
+4. `fact.support_count` = 关联 claim 数；`fact.source_count` = **独立源数**（distinct `item.source_id`）。
+   只有 `source_count ≥ 2` 才算被两个源证实——同一篇文章里的两条 claim 不是互证（v17 起 QA 与简报都改用它）。
+
+> 已知限制：单遍 leader 聚类对顺序敏感、`canonical_text` 不刷新。硬负样本（同一属性的不同数值）从未测过。
+> 修法见 `docs/improvement-plan.md` Phase 4（banded 阈值 + 数字/日期/否定 veto + 夜间离线合并 + fact id 迁移）。
 
 向量缓存在 `out/story-vectors.json`，避免每次重嵌全库。
 
@@ -66,9 +72,9 @@ cli/ingest.mjs → cli/finalize.mjs → cli/apply-policy.mjs → cli/apply-conso
 
 | 信号 | 阈值 |
 |---|---|
-| 正文向量相似（top-5） | cosine ≥ 0.62 |
+| 正文向量相似（top-5） | cosine ≥ 0.55（早期文档写的 0.62 是笔误） |
 | Jev `same_event` | ≥ 0.65 才算候选父 |
-| 事实覆盖（已覆盖判定） | 缺口事实需 cosine < 0.85 |
+| 事实缺口（当前实现） | 事实文本 cosine < 0.85 视为缺口（计划改为按 fact id 身份判定） |
 | 事实亲和度 | 新事实与父 Story 事实簇的重合比例 |
 
 判定结果：

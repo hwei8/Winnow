@@ -64,3 +64,18 @@ test('repairSectionIds recovers anchors whose section_id is NULL or dangling', (
   assert.equal(repairSectionIds(db), 0)
   db.close()
 })
+
+test('repairSectionIds leaves pending update anchors alone', () => {
+  const db = freshDb(path.join(tmpDir, 'pending.db'))
+  const sid = 'story:p'
+  db.prepare("INSERT INTO story(id,title) VALUES (?, 't')").run(sid)
+  db.prepare('INSERT INTO story_section(id,story_id,order_idx,heading,body_md,char_start,char_end) VALUES (?,?,?,?,?,?,?)')
+    .run(sectionId(sid, 1), sid, 1, '一', 'aaaa', 0, 40)
+  const insSf = db.prepare('INSERT INTO story_fact(story_id,fact_id,section_id,char_start,char_end,role,order_idx) VALUES (?,?,?,?,?,?,?)')
+  insSf.run(sid, 'F1', null, 0, 0, 'update', 0)   // 待定追加：不是丢了归属，不能被钉到第 1 节
+  insSf.run(sid, 'F2', null, 10, 20, 'asserts', 1) // 真孤儿：该归位
+  assert.equal(repairSectionIds(db), 1)
+  const rows = db.prepare('SELECT fact_id, section_id FROM story_fact ORDER BY fact_id').all()
+  assert.deepEqual(rows.map(r => r.section_id), [null, sectionId(sid, 1)])
+  db.close()
+})
