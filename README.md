@@ -3,9 +3,9 @@
 **把新闻洪流折叠成可读的 Story 的个人记忆系统。**
 *Personal memory & information filter — turn an endless feed into a handful of stories you can actually read, and remember what you decided to keep.*
 
-[![CI](https://github.com/OWNER/im-base/actions/workflows/ci.yml/badge.svg)](../../actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D22.5-brightgreen)](package.json)
+[![Tests](https://img.shields.io/badge/tests-19%20passing-brightgreen)](tests/)
 
 ---
 
@@ -93,14 +93,14 @@ src/cli  ─┼─→ src/domains/*  ─→ src/providers/*  ─→ src/shared
 |---|---|
 | ![entity](docs/assets/screenshots/03-entity.png) | ![search](docs/assets/screenshots/04-search.png) |
 
-九页：`/` 无限流 · `/story/:id` 详情（事实锚点 + 证据 + 时间线） · `/entity/:id` · `/topics` 覆盖地图 · `/search` · `/claims` 数据质量 · `/brief` 简报 · `/memory` 我要记住的 · `/audit` 审计。
+十一页：`/` 无限流 · `/story/:id` 详情（事实锚点 + 证据 + 时间线） · `/entity/:id` · `/topics` 覆盖地图 · `/search` · `/claims` 数据质量 · `/brief` 简报 · `/memory` 我要记住的 · `/audit` 审计。
 
 ## 快速开始
 
 **要求**：Node ≥ 22.5（用 `node:sqlite`）、一个 OpenAI 兼容的 chat 端点、一个 embedding 端点。
 
 ```bash
-git clone https://github.com/OWNER/im-base.git
+git clone <this-repo> im-base
 cd im-base
 npm install
 
