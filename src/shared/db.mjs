@@ -7,6 +7,8 @@ import { mkdirSync, rmSync } from 'node:fs'
 import path from 'node:path'
 import { DATA_DIR, DB_PATH, ROOT, SUMMARY_ROOT } from './config.mjs'
 import { SCHEMA_VERSION, applySchema, migrateSchema } from './schema.mjs'
+import { setUsageSink } from '../providers/llm.mjs'
+import { randomUUID } from 'node:crypto'
 
 export { DB_PATH, ROOT, SUMMARY_ROOT, DATA_DIR }
 
@@ -20,6 +22,9 @@ export function openDb (dbPath = DB_PATH) {
   db.exec('PRAGMA synchronous = NORMAL')
   db.exec('PRAGMA cache_size = -64000')
   ensureSchema(db)
+  // 账单 sink：llm.mjs 每次成功调用回调一次，这里落 token_ledger（失败不打断调用）
+  const insUsage = db.prepare('INSERT INTO token_ledger(id,at,task,model,prompt_tokens,completion_tokens,total_tokens,cost,ref,latency_ms) VALUES (?,?,?,?,?,?,?,?,?,?)')
+  setUsageSink((u) => insUsage.run('t:' + randomUUID().slice(0, 10), nowIso(), u.task, u.model, u.prompt, u.completion, u.total, u.cost, null, u.latencyMs))
   return db
 }
 

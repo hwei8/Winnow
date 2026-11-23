@@ -54,7 +54,7 @@ export async function extractClaimsFromText (text, { concurrency = 2 } = {}) {
   const { results } = await runPool(used.map((body) => async () => {
     const cap = Math.min(12, Math.max(6, Math.ceil(body.length / 450)))
     try {
-      const r2 = await chat({ json: true, maxTokens: 12000, messages: [{ role: 'user', content: PROMPT(cap, body) }] })
+      const r2 = await chat({ json: true, maxTokens: 12000, task: 'claim_extract', messages: [{ role: 'user', content: PROMPT(cap, body) }] })
       return extractJson(r2.content)?.claims || []
     } catch (e) {
       console.error('[claims] chunk failed:', String(e.message).slice(0, 80))

@@ -63,7 +63,14 @@ async function decideAndApply (item, claimIds) {
   const { assigned, created } = await assignClaimsToFacts(db, claimIds)
   const factIds = db.prepare(`SELECT fact_id FROM claim WHERE id IN (${claimIds.map(() => '?').join(',')}) AND fact_id IS NOT NULL`).all(...claimIds).map(r => r.fact_id)
   if (factIds.length < 2) return { item: item.id, decision: 'new', reason: 'too-few-facts', facts: factIds.length }
-  const link = await linkIncoming({ title: item.title, body: item.text, factIds })
+  // 同一条 item 重跑（补抓/重试）不该把自己判成"更新自己"：先看它已在哪篇 Story 里
+  const ownStories = db.prepare('SELECT story_id FROM story_item WHERE item_id=?').all(item.id).map(r => r.story_id)
+  const link = await linkIncoming({ title: item.title, body: item.text, factIds, excludeStoryId: ownStories[0] || null })
+  if (link.parent && ownStories.includes(link.parent.id)) {
+    db.prepare('INSERT OR REPLACE INTO ingest_decision(item_id,action,parent_story_id,same_event,gap_count,claims,decided_at) VALUES (?,?,?,?,?,?,?)')
+      .run(item.id, 'duplicate', link.parent.id, link.parent.same_event ?? null, 0, claimIds.length, nowIso())
+    return { item: item.id, decision: 'duplicate', reason: 'same-item', parent: link.parent.title, assigned, created }
+  }
   const action = link.action
   const parentId = link.parent?.id || null
   // 判定器不可用：不再猜，也不写 story_link（写下去就会被当成已决），条目退回队列等下一轮

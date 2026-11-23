@@ -35,7 +35,11 @@ export function isRetryable (err) {
   return false
 }
 
-export async function chat ({ messages, model = LLM_CHAT_MODEL, maxTokens = 6000, json = false, temperature = 0, timeoutMs = 180000, retries = Number(process.env.LLM_RETRIES || 6) }) {
+let usageSink = null
+/** 装上账单 sink（shared/db.mjs 在 openDb 时安装；测试里不装就不会写库）。 */
+export function setUsageSink (fn) { usageSink = fn }
+
+export async function chat ({ messages, model = LLM_CHAT_MODEL, maxTokens = 6000, json = false, temperature = 0, timeoutMs = 180000, retries = Number(process.env.LLM_RETRIES || 6), task = 'chat' }) {
   const body = { model, messages, max_tokens: maxTokens, temperature }
   if (json) body.response_format = { type: 'json_object' }
   let lastErr
@@ -60,6 +64,21 @@ export async function chat ({ messages, model = LLM_CHAT_MODEL, maxTokens = 6000
       const data = JSON.parse(text)
       const choice = data.choices?.[0]
       const usage = data.usage || {}
+      // 账单诚实：每次成功调用都过一遍 sink（shared/db 装上后写 token_ledger）。
+      // 以前 usage 只是返回给调用方，没人落库，/audit 的"Token 账本"永远是空的。
+      if (usageSink) {
+        try {
+          usageSink({
+            task,
+            model: data.model || model,
+            latencyMs: ms,
+            prompt: usage.prompt_tokens ?? 0,
+            completion: usage.completion_tokens ?? 0,
+            total: usage.total_tokens ?? 0,
+            cost: usage.cost ?? data.opencode?.list_cost ?? 0
+          })
+        } catch {}
+      }
       return {
         content: choice?.message?.content ?? '',
         reasoning: choice?.message?.reasoning_content ?? '',
