@@ -33,7 +33,7 @@ cli/ingest.mjs → cli/finalize.mjs → cli/apply-policy.mjs → cli/apply-conso
 
 正文获取顺序（`ingest/page.mjs`）：
 
-1. 直连 HTML + `extract.mjs` 正文抽取（`FEED_MIN = 700` 字以上视为全文源，不再抓页）；
+1. 直连 HTML + `extract.mjs` 正文抽取（`FEED_MIN = 700` 字以上视为全文源，不再抓页）；抽取会丢掉 LaTeX 宏定义/公式块（`ingest/tex.mjs`），历史库里这类块在 `db:repair` 时标成 `kind='noise'` 并从所有读取路径排除；
 2. 不足 400 字**或直连抛错**（抖动 / 反爬）→ 搜索 API 的 `fetch` 兜底（`markdownToBlocks`）。两步都在 `ingest/page.mjs` 的 `loadArticle()` 里，入库只调它，避免各自分叉；
 3. 仍不足 → 用 feed 摘要，标记 `content_source = summary`（会成为「片段 Story」）。
 
