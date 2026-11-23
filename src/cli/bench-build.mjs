@@ -70,6 +70,8 @@ async function buildLink (db) {
   const texts = []
   for (const it of sample) {
     const t = await itemText(db, it.id)
+    // 正文太短（标题党 / 视频条目 / 只有摘要）判不了"是不是同一件事"，不进标注集
+    if (t.length < 250) { it.skip = true; texts.push(`${it.title || ''}`); continue }
     texts.push(`${it.title || ''}\n${t.slice(0, 1800)}`)
     it.text = t
   }
@@ -79,6 +81,7 @@ async function buildLink (db) {
   let seq = 0
   for (let i = 0; i < sample.length; i++) {
     const it = sample[i]
+    if (it.skip) continue
     const v = vecs[i]
     const ranked = haveVec
       .map((s) => ({ s, c: cos(v, cache[s.id]) }))
@@ -143,10 +146,11 @@ async function buildProductionLinked (db, limit) {
   for (const e of edges) {
     const it = db.prepare('SELECT id, title, published_ts FROM item WHERE id=?').get(e.item_id)
     const st = db.prepare('SELECT id, title, body_md, first_seen_ts FROM story WHERE id=?').get(e.parent_story_id)
-    if (!it || !st || !st.body_md) continue
+    if (!it || !st || !st.body_md || st.body_md.length < 300) continue
     // 自己 Story 的配对没有判定的意义（重跑入库时必然同事件），只会把正例率虚抬
     if (db.prepare('SELECT 1 FROM story_item WHERE item_id=? AND story_id=?').get(it.id, st.id)) continue
     const text = await itemText(db, it.id)
+    if (text.length < 250) continue
     out.push({
       id: `linkp:${String(++seq).padStart(4, '0')}`,
       task: 'link',
