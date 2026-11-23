@@ -60,6 +60,15 @@ async function qa (story) {
   } catch {}
 
   const chars = body.length
+  // 锚点健康度：偏移越界 = 正文重写后没做 realign，那段证据在页面上根本定位不到；
+  // 归属缺失 = section_id 为 NULL 或指向不存在的章节，consolidate 重建时会连带删锚点。
+  const anchorRows = db.prepare(`SELECT sf.char_start, sf.char_end,
+      EXISTS (SELECT 1 FROM story_section ss WHERE ss.id = sf.section_id) AS has_section
+    FROM story_fact sf WHERE sf.story_id=?`).all(story.id)
+  const stale = anchorRows.filter(r => r.char_start < 0 || r.char_end <= r.char_start || r.char_end > chars).length
+  const orphan = anchorRows.filter(r => !r.has_section).length
+  const staleRate = anchorRows.length ? stale / anchorRows.length : 0
+  const orphanRate = anchorRows.length ? orphan / anchorRows.length : 0
   const lengthAdequacy = Math.min(1, chars / (available.length >= 30 ? 1200 : 500))
   const density = chars > 0 ? Math.min(1, (links.length / chars) * 100) : 0
   let score = 22 * coverageAll + 18 * coverageKey + 15 * titleAlign + 20 * (1 - Math.min(1, dupRate * 4)) + 12 * lengthAdequacy + 8 * density + 5 * Math.max(0, 1 - conflicts / 3)
@@ -70,6 +79,7 @@ async function qa (story) {
   if (isDuplicate) score = Math.min(score, 40)  // 重复 Story 封顶 40
   if (isSnippet) score = Math.min(score, 55)    // 片段封顶 55
   if (anchorMismatch) score -= 5                // 锚点与来源事实漂移
+  if (staleRate >= 0.2) score -= Math.min(8, staleRate * 10)   // 锚点偏移越界：证据在页面上定位不到
   if (external.length > 0 && availSet.size > 0) score -= Math.min(5, external.length / Math.max(1, availSet.size) * 10)
   if (rel.includes('overlap')) score -= 5
   if (rel.includes('update')) score += 2
@@ -77,11 +87,13 @@ async function qa (story) {
     story_id: story.id, title: story.title, category: story.category,
     external_facts: external.length,
     anchor_mismatch: anchorMismatch,
+    anchors_stale: stale, anchors_orphan: orphan,
+    anchors_stale_rate: +staleRate.toFixed(3), anchors_orphan_rate: +orphanRate.toFixed(3),
     score: +Math.max(0, Math.min(100, score)).toFixed(1),
     coverage_all: +coverageAll.toFixed(3), coverage_key: +coverageKey.toFixed(3), title_align: +titleAlign.toFixed(2),
     dup_rate: +dupRate.toFixed(3), conflicts, anchors: links.length, facts_available: available.length, chars,
     duplicate: isDuplicate, snippet: isSnippet, merged_into: story.merged_into || null,
-    issues: { dup_examples: [], conflict_examples: [], missed_top: available.filter(f => !used.has(f.id)).sort((a, b) => (b.support_count || 0) - (a.support_count || 0)).slice(0, 5).map(f => ({ id: f.id, text: f.canonical_text.slice(0, 60), support: f.support_count })) }
+    issues: { anchors_stale: stale, anchors_orphan: orphan, anchors_stale_rate: +staleRate.toFixed(3), anchors_orphan_rate: +orphanRate.toFixed(3), dup_examples: [], conflict_examples: [], missed_top: available.filter(f => !used.has(f.id)).sort((a, b) => (b.support_count || 0) - (a.support_count || 0)).slice(0, 5).map(f => ({ id: f.id, text: f.canonical_text.slice(0, 60), support: f.support_count })) }
   }
 }
 

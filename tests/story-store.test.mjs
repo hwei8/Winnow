@@ -36,13 +36,31 @@ test('repairSectionIds fixes bare secN ids and is idempotent', () => {
   db.prepare("INSERT INTO story(id,title) VALUES (?, 't')").run(sid)
   db.prepare('INSERT INTO story_section(id,story_id,order_idx,heading,body_md,char_start,char_end) VALUES (?,?,?,?,?,?,?)').run(sectionId(sid, 1), sid, 0, 'h', 'b', 0, 10)
   const insSf = db.prepare('INSERT INTO story_fact(story_id,fact_id,section_id,char_start,char_end,role,order_idx) VALUES (?,?,?,?,?,?,?)')
-  insSf.run(sid, 'F00001', 'sec1', 0, 5, 'asserts', 0) // 历史坏数据
+  insSf.run(sid, 'F00001', 'sec1', 0, 5, 'asserts', 0) // 历史坏数据：裸 secN
   insSf.run(sid, 'F00002', sectionId(sid, 1), 5, 9, 'asserts', 1) // 已经正确
-  insSf.run(sid, 'F00003', 'sec9', 0, 1, 'asserts', 2) // 找不到对应章节：不动
 
   assert.equal(repairSectionIds(db), 1)
   assert.equal(repairSectionIds(db), 0)
   const ids = db.prepare('SELECT fact_id, section_id FROM story_fact ORDER BY fact_id').all().map(r => r.section_id)
-  assert.deepEqual(ids, [sectionId(sid, 1), sectionId(sid, 1), 'sec9'])
+  assert.deepEqual(ids, [sectionId(sid, 1), sectionId(sid, 1)])
+  db.close()
+})
+
+test('repairSectionIds recovers anchors whose section_id is NULL or dangling', () => {
+  const db = freshDb(path.join(tmpDir, 'orphans.db'))
+  const sid = 'story:o'
+  db.prepare("INSERT INTO story(id,title) VALUES (?, 't')").run(sid)
+  const insSec = db.prepare('INSERT INTO story_section(id,story_id,order_idx,heading,body_md,char_start,char_end) VALUES (?,?,?,?,?,?,?)')
+  insSec.run(sectionId(sid, 1), sid, 1, '一', 'aaaa', 0, 40)
+  insSec.run(sectionId(sid, 2), sid, 2, '二', 'bbbb', 40, 100)
+  const insSf = db.prepare('INSERT INTO story_fact(story_id,fact_id,section_id,char_start,char_end,role,order_idx) VALUES (?,?,?,?,?,?,?)')
+  insSf.run(sid, 'F1', null, 50, 60, 'asserts', 0)                 // NULL + 落在第二节
+  insSf.run(sid, 'F2', 'story:gone:sec9', 5, 9, 'asserts', 1)       // 指向不存在的章节 + 落在第一节
+  insSf.run(sid, 'F3', null, 500, 520, 'asserts', 2)                // 没有任何章节覆盖：保持原样
+
+  assert.equal(repairSectionIds(db), 2)
+  const rows = db.prepare('SELECT fact_id, section_id FROM story_fact ORDER BY fact_id').all()
+  assert.deepEqual(rows.map(r => r.section_id), [sectionId(sid, 2), sectionId(sid, 1), null])
+  assert.equal(repairSectionIds(db), 0)
   db.close()
 })

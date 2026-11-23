@@ -34,7 +34,7 @@ cli/ingest.mjs → cli/finalize.mjs → cli/apply-policy.mjs → cli/apply-conso
 正文获取顺序（`ingest/page.mjs`）：
 
 1. 直连 HTML + `extract.mjs` 正文抽取（`FEED_MIN = 700` 字以上视为全文源，不再抓页）；
-2. 不足 400 字或失败 → 搜索 API 的 `fetch` 兜底（`markdownToBlocks`）；
+2. 不足 400 字**或直连抛错**（抖动 / 反爬）→ 搜索 API 的 `fetch` 兜底（`markdownToBlocks`）。两步都在 `ingest/page.mjs` 的 `loadArticle()` 里，入库只调它，避免各自分叉；
 3. 仍不足 → 用 feed 摘要，标记 `content_source = summary`（会成为「片段 Story」）。
 
 `ingest/registry.mjs` 的 `collect()` 会在入库前自动补 `source` 行，并写 `adapter_health`。
@@ -127,7 +127,9 @@ cli/ingest.mjs → cli/finalize.mjs → cli/apply-policy.mjs → cli/apply-conso
 | 信息密度 | 8 | 事实数 / 字数 |
 | 冲突 | 5 | 同 Story 内自相矛盾 |
 
-惩罚：`anchor_mismatch` −5；引用外部事实（不属于本 Story 的 item）最多 −5。
+惩罚：`anchor_mismatch` −5；锚点偏移越界（正文重写后没 realign，页面上定位不到）按越界比例最多 −8；引用外部事实（不属于本 Story 的 item）最多 −5。
+
+锚点健康度写进 `story_qa.issues_json`：`anchors_stale`（偏移越界行数）/ `anchors_orphan`（`section_id` 为 NULL 或指向不存在章节）。两者都该是 0，扫描见 `npm run db:repair`（按字符区间补归属）与 `npm run realign`。
 封顶：`duplicate` 40 分，`snippet` 55 分——**不合格的类型不会因为"写得好看"而通过**。
 
 ## 7. 回归与观察

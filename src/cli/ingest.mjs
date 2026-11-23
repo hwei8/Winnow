@@ -7,10 +7,9 @@
 import { createHash } from 'node:crypto'
 import { openDb, nowIso } from '../shared/db.mjs'
 import { LLM_CHAT_MODEL } from '../shared/config.mjs'
-import { blockText, locate } from '../domains/ingest/feed.mjs'
-import { extractMainText } from '../domains/ingest/extract.mjs'
-import { fetchPage } from '../domains/ingest/page.mjs'
-import { fetchHtml, cleanBlocks, titleOfHtml, saveItem, itemIdFor, loadItem } from '../domains/ingest/store.mjs'
+import { locate } from '../domains/ingest/feed.mjs'
+import { loadArticle } from '../domains/ingest/page.mjs'
+import { saveItem, itemIdFor, loadItem } from '../domains/ingest/store.mjs'
 import { chat, extractJson } from '../providers/llm.mjs'
 import { assignClaimsToFacts } from '../domains/knowledge/facts.mjs'
 import { linkIncoming } from '../domains/knowledge/link.mjs'
@@ -33,18 +32,16 @@ async function ingest (url) {
     const claims = db.prepare('SELECT COUNT(*) c FROM claim WHERE item_id=?').get(id).c
     if (claims > 0) return { url, id, title: existing.title, text: existing.blocks.join('\n'), blocks: existing.blocks, reused: true }
   }
-  let html
-  try { html = await fetchHtml(url) } catch (e) { return { url, error: String(e.message).slice(0, 120) } }
-  let blocks = cleanBlocks(extractMainText(html))
-  let text = blockText(blocks)
-  if (text.length < 400) {
-    try {
-      const p = await fetchPage(url)
-      blocks = p.blocks; text = p.text
-    } catch (e) { console.error('  [fallback]', url, String(e.message).slice(0, 80)) }
+  // 直连抛错（网络抖动 / 反爬）与"抽出来太短"都走 loadArticle 的统一兜底：
+  // 以前 fetchHtml 一抛错就直接 return，整条内容丢掉，而 DeepSeek fetch 通常能拿到正文。
+  let blocks, text, title
+  try {
+    ({ blocks, text, title } = await loadArticle(url, { minChars: 400 }))
+  } catch (e) {
+    console.error('  [fetch]', url, String(e.message).slice(0, 80))
+    const m = String(e.message)
+    return { url, error: m.startsWith('too-short') ? 'too-short' : 'fetch-failed', chars: text ? text.length : 0 }
   }
-  if (text.length < 400) return { url, error: 'too-short', chars: text.length }
-  const title = titleOfHtml(html).slice(0, 220)
   saveItem(db, { itemId: id, sourceId: SOURCE, url, title, blocks, text })
   return { url, id, title, text: blocks.join('\n'), blocks }
 }

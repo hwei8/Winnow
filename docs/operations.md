@@ -25,7 +25,7 @@
 | `WINNOW_DB` | 可选 | 数据库路径（默认 `data/winnow.db`） |
 | `WINNOW_DATA_DIR` / `WINNOW_OUT_DIR` | 可选 | 数据 / 产物目录 |
 | `HOST` / `PORT` | 可选 | Web 监听（默认 `127.0.0.1:3083`，只本机可访问） |
-| `WINNOW_WEB_TOKEN` | 暴露到局域网时必填 | Web 访问令牌；设置后所有请求都要带（见下文「Web 安全」） |
+| `WINNOW_WEB_TOKEN` | 暴露到局域网时强烈建议 | Web 访问令牌；设置后所有请求都要带（见下文「Web 安全」） |
 | `WINNOW_ALLOWED_HOSTS` | 可选 | 反代 / 自定义域名时追加允许的 Host，逗号分隔 |
 | `WINNOW_PUBLIC_URL` | 可选 | 简报里 Story 链接的前缀，如 `https://winnow.example.com` |
 | `WINNOW_TZ` | 可选 | 简报 / 日报的日期时区（默认 `Asia/Shanghai`） |
@@ -46,7 +46,7 @@
 
 Web 没有登录系统，写接口（捕获 / 标注 / 深研 / 一键入库）会改库、花 LLM 额度、触发出站抓取。防护分四层：
 
-1. **默认只监听 `127.0.0.1`**。要在手机 / 局域网访问，设置 `HOST=0.0.0.0` **并且**设置 `WINNOW_WEB_TOKEN`；
+1. **默认只监听 `127.0.0.1`**。要在手机 / 局域网访问，设置 `HOST=0.0.0.0`；此时 Host 只放行本机网卡地址，`Host: evil.example.com` 之类仍然 403，但**不设 `WINNOW_WEB_TOKEN` 时同网段任何设备都能读写**（启动日志会告警），建议同时设 token；
    首次访问 `http://<ip>:3083/?token=<令牌>`，之后由 HttpOnly cookie 保持。启动时未设令牌会打印警告。
 2. **Host 白名单**：未设令牌时只接受 `localhost` / `127.0.0.1` / 本机网卡地址作为 Host，挡 DNS rebinding。
    反代到自定义域名时用 `WINNOW_ALLOWED_HOSTS=winnow.example.com` 追加。

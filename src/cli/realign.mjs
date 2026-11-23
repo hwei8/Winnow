@@ -19,7 +19,11 @@ for (const sid of stories) {
   if (!story) continue
   const anchors = db.prepare('SELECT COUNT(*) c FROM story_fact WHERE story_id=?').get(sid).c
   const available = db.prepare(`SELECT COUNT(DISTINCT f.id) c FROM story_item si JOIN claim c ON c.item_id=si.item_id JOIN fact f ON f.id=c.fact_id WHERE si.story_id=?`).get(sid).c
-  if (!available || anchors >= Math.max(3, available * 0.6)) continue
+  // 偏移越界的锚点等于没有：正文被重写过却没重对齐，页面上定位不到，必须重跑
+  const stale = db.prepare(`SELECT COUNT(*) c FROM story_fact WHERE story_id=? AND (char_start < 0 OR char_end <= char_start OR char_end > ?)`).get(sid, story.body_md.length).c
+  const staleRate = anchors ? stale / anchors : 0
+  if (!available) continue
+  if (anchors >= Math.max(3, available * 0.6) && staleRate < 0.2) continue
   const facts = db.prepare(`SELECT DISTINCT f.id,f.canonical_text FROM story_item si JOIN claim c ON c.item_id=si.item_id JOIN fact f ON f.id=c.fact_id
     WHERE si.story_id=? AND COALESCE(c.status,'')!='meta'`).all(sid)
   if (facts.length < 2) continue
@@ -44,13 +48,17 @@ for (const sid of stories) {
   pairs.forEach((p, k) => { questions['q' + k] = { type: 'noul', instructions: `Pair ${k}: the sentence asserts the same information as the fact.`, criteria: { true: 'Same subject/attribute/value; wording may differ.', false: 'Related but does not state it.' } } })
   let answers = {}
   if (pairs.length) { try { const r = await decide({ state, questions, timeoutMs: 120000 }); answers = r.answers || {} } catch {} }
+  const sections = db.prepare('SELECT id, char_start, char_end FROM story_section WHERE story_id=? ORDER BY (char_end - char_start) ASC').all(sid)
+  // 章节归属一并写入：以前这里插的是 NULL，之后 consolidate 重建章节就会把这些锚点一起删掉
+  const sectionOf = (start, end) => (sections.find((x) => x.char_start <= start && x.char_end >= end)
+    || sections.find((x) => x.char_start <= start && x.char_end > start) || {}).id ?? null
   const accepted = pairs.filter((p, k) => (answers['q' + k]?.noul ?? 0) >= 0.6)
   if (!accepted.length) continue
   db.exec('BEGIN IMMEDIATE')
   try {
     db.prepare('DELETE FROM story_fact WHERE story_id=?').run(sid)
     const ins = db.prepare('INSERT OR REPLACE INTO story_fact(story_id,fact_id,section_id,char_start,char_end,role,order_idx) VALUES (?,?,?,?,?,?,?)')
-    accepted.forEach((p, order) => ins.run(sid, p.f.id, null, sents[p.s].start, sents[p.s].end, 'asserts', order))
+    accepted.forEach((p, order) => ins.run(sid, p.f.id, sectionOf(sents[p.s].start, sents[p.s].end), sents[p.s].start, sents[p.s].end, 'asserts', order))
     db.exec('COMMIT')
   } catch (e) { db.exec('ROLLBACK'); continue }
   fixed++

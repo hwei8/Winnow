@@ -118,7 +118,7 @@ npm run pipeline -- --adapter=rss --limit=20
 npm run web
 ```
 
-打开 `http://127.0.0.1:3083/`。默认只监听本机；要在局域网 / 手机上访问，见 [docs/operations.md「Web 安全」](docs/operations.md#web-安全)（`HOST=0.0.0.0` 时必须设置 `WINNOW_WEB_TOKEN`）。
+打开 `http://127.0.0.1:3083/`。默认只监听本机；要在局域网 / 手机上访问，见 [docs/operations.md「Web 安全」](docs/operations.md#web-安全)（`HOST=0.0.0.0` 时只放行本机网卡的 Host，但同网段可读写，建议同时设置 `WINNOW_WEB_TOKEN`）。
 
 ### 从零到第一篇 Story
 

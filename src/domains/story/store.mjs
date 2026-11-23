@@ -29,11 +29,35 @@ export function upsertStory (db, row) {
 }
 
 /**
- * 修复历史数据：把裸的 `secN` 形式的 section_id 改成 `${story_id}:secN`。
- * 只改能在 story_section 里找到对应行的记录；幂等。返回修复的行数。
+ * 修复历史数据，幂等，返回修复的行数。两种错配都要修：
+ *
+ *  1. 裸 `secN` → `${story_id}:secN`（早期 generate-stories 的写法，consolidate 按完整 id 查不到就丢锚点）。
+ *  2. `section_id` 为 NULL 或指向已不存在的章节 → 按 `char_start/char_end` 归到覆盖它的章节。
+ *     正文重写后偏移仍落在章节区间内，只是归属丢了；没有归属时 consolidate 重建章节会连带删掉锚点。
+ *     先按"完整覆盖取最内层章节"，再退一步按"起点落在章节内取最内层"，两轮都不中的保持原样。
  */
 export function repairSectionIds (db) {
-  return db.prepare(`UPDATE story_fact SET section_id = story_id || ':' || section_id
+  const prefixed = db.prepare(`UPDATE story_fact SET section_id = story_id || ':' || section_id
     WHERE section_id GLOB 'sec[0-9]*'
       AND EXISTS (SELECT 1 FROM story_section ss WHERE ss.id = story_fact.story_id || ':' || story_fact.section_id)`).run().changes
+
+  const orphans = db.prepare(`SELECT story_id, fact_id, char_start, char_end FROM story_fact sf
+    WHERE NOT EXISTS (SELECT 1 FROM story_section ss WHERE ss.id = sf.section_id)`).all()
+  const strict = db.prepare(`SELECT id FROM story_section
+    WHERE story_id = ? AND char_start <= ? AND char_end >= ?
+    ORDER BY (char_end - char_start) ASC LIMIT 1`)
+  const loose = db.prepare(`SELECT id FROM story_section
+    WHERE story_id = ? AND char_start <= ? AND char_end > ?
+    ORDER BY (char_end - char_start) ASC LIMIT 1`)
+  const update = db.prepare(`UPDATE story_fact SET section_id = ?
+    WHERE story_id = ? AND fact_id = ? AND char_start = ?`)
+
+  let ranged = 0
+  for (const r of orphans) {
+    const hit = strict.get(r.story_id, r.char_start, r.char_end) || loose.get(r.story_id, r.char_start, r.char_start)
+    if (!hit) continue
+    update.run(hit.id, r.story_id, r.fact_id, r.char_start)
+    ranged++
+  }
+  return prefixed + ranged
 }

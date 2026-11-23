@@ -2,7 +2,7 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循语义化。
 
-## [Unreleased] — 审计修复
+## [Unreleased] — 审计修复与复核补丁
 
 完整说明见本地 `reports/FIX-REPORT.md`（不入库）。
 
@@ -18,6 +18,11 @@
 - `/api/ingest-run` 指向真实的 `cli/worker.mjs`（此前指向不存在的文件）
 - `generate-stories` 的 `story_fact.section_id` 格式错误导致 consolidate 丢锚点；新增 `npm run db:repair` 修复存量（10,744 行）
 - 事实归簇：同批去重、Jev 故障即停（不再批量制造重复 fact）、编号在写事务内分配；三份重复实现合并为一份
+- **复核补丁**：抓正文统一走 `ingest/page.mjs` 的 `loadArticle()`，直连抛错也走 DeepSeek 兜底（此前抛错直接丢条目）
+- **复核补丁**：`db:repair` 除裸 `secN` 外，再按字符区间补 `section_id`（存量 489 行 / 29 篇）；
+  `cli/realign.mjs` 写入锚点时一并写章节归属，并对"偏移越界"的 Story 触发重对齐（此前会跳过、且写入 NULL）
+- **复核补丁**：QA 增加锚点健康度（`anchors_stale` / `anchors_orphan`），越界按比例扣分，最多 −8
+- **复核补丁**：`WINNOW_WEB_TOKEN` 在文档中改为"局域网访问强烈建议"（实际行为是告警而非强制）
 - `story` / `item` 写入改为 upsert，不再清空未列出的列，已判重的 Story 不会被重新生成"复活"
 - 入库队列原子领取 + 卡死任务回收；worker 用机读报告判断成败
 - `discover` / `hot` / `extract-facts` / `link-stories` / `im-capture` 的路径与密钥读取（重构后失效）

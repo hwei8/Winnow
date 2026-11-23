@@ -21,6 +21,32 @@ export function markdownToBlocks (md) {
     .filter(b => !/^(cookie|privacy|subscribe|sign in|log in|advertisement|分享到|责任编辑)/i.test(b))
 }
 
+/**
+ * 取一篇可用正文：直连抽取 → 太短或抛错都走 fetchPage 兜底。
+ * 入库与其它调用方共用这一份实现，避免"抓取失败直接丢"的分叉。
+ * 失败抛 `fetch-failed` / `too-short: N`，由调用方决定记录方式。
+ */
+export async function loadArticle (url, { minChars = MIN_CHARS } = {}) {
+  let html = null
+  let blocks = []
+  let text = ''
+  let title = ''
+  try {
+    html = await fetchHtml(url)
+    blocks = cleanBlocks(extractMainText(html))
+    text = blockText(blocks)
+    title = titleOfHtml(html).slice(0, 220)
+  } catch (e) { /* 直连失败（抖动 / 反爬）不在这里放弃，交给兜底 */ }
+  if (text.length < minChars) {
+    const p = await fetchPage(url, { minChars })
+    blocks = p.blocks
+    text = p.text
+    title = title || String(p.title || '').slice(0, 220)
+  }
+  if (text.length < minChars) throw new Error(text.length ? `too-short: ${text.length}` : 'fetch-failed')
+  return { blocks, text, title: title || url, via: html ? 'http' : 'deepseek' }
+}
+
 export async function fetchPage (url, { minChars = MIN_CHARS, allowFallback = process.env.FETCH_FALLBACK !== '0' } = {}) {
   let html = null
   try {
